@@ -87,11 +87,21 @@ export function FileCard({ file, onDelete }) {
     window.open(previewUrl, '_blank');
   };
 
+  const [isPrinted, setIsPrinted] = useState(file.printedStatus || false);
+
+  const togglePrint = async () => {
+    const nextVal = !isPrinted;
+    setIsPrinted(nextVal);
+    try {
+      await axios.patch(`${config.serverUrl}/api/files/${file.uuid || file.id || file._id}/print`);
+    } catch {}
+  };
+
   return (
     <>
       <motion.div
-        className="file-card glass-card"
-        initial={{ opacity: 0, y: 12 }}
+        className={`file-card glass-card ${isPrinted ? 'file-printed' : ''}`}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
@@ -115,12 +125,20 @@ export function FileCard({ file, onDelete }) {
                 </>
               )}
               {file.isP2P && <span className="badge badge-accent">P2P</span>}
+              {isPrinted && <span className="badge badge-success">✓ Printed</span>}
             </div>
           </div>
         </div>
 
         {/* Right: actions */}
         <div className="file-actions">
+          <button
+            className={`btn-print-toggle ${isPrinted ? 'printed' : ''}`}
+            title="Toggle Printed Status"
+            onClick={togglePrint}
+          >
+            {isPrinted ? '✓ Printed' : '🖨️ Mark Printed'}
+          </button>
           {canPreview && (
             <button
               className="btn-icon"
