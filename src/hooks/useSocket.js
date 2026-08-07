@@ -1,0 +1,60 @@
+/**
+ * client/src/hooks/useSocket.js
+ * Custom hook — manages Socket.io connection lifecycle
+ */
+
+import { useEffect, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
+import { config } from '../config';
+
+/**
+ * @param {string} role - 'laptop' or 'mobile'
+ * @param {string} [deviceName] - Name to send to server on connect
+ * @param {string} [sessionId] - Unique session ID for room-based pairing
+ * @returns {{ socket: Socket|null, connected: boolean }}
+ */
+export function useSocket(role, deviceName = 'Browser', sessionId = null) {
+  const socketRef = useRef(null);
+  const [connected, setConnected] = useState(false);
+
+  const roleRef = useRef(role);
+  const deviceNameRef = useRef(deviceName);
+  const sessionIdRef = useRef(sessionId);
+
+  roleRef.current = role;
+  deviceNameRef.current = deviceName;
+  sessionIdRef.current = sessionId;
+
+  useEffect(() => {
+    const socket = io(config.serverUrl, {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      setConnected(true);
+      // Identify this client & join session room
+      socket.emit('device_identify', { name: deviceNameRef.current, role: roleRef.current });
+      if (sessionIdRef.current) {
+        socket.emit('join_session', {
+          sessionId: sessionIdRef.current,
+          name: deviceNameRef.current,
+          role: roleRef.current,
+        });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      setConnected(false);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  return { socket: socketRef.current, connected };
+}
