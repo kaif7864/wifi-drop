@@ -208,8 +208,10 @@ export function LaptopView() {
               </div>
             ) : (
               <div className="auth-actions flex items-center gap-2">
-                <a href="/login" className="btn btn-ghost btn-xs">Login</a>
-                <a href="/register" className="btn btn-primary btn-xs">Register Shop</a>
+                <a href="/login" className="btn btn-ghost btn-sm header-auth-btn">Shop Login</a>
+                <a href="/register" className="btn btn-primary btn-sm header-auth-btn">
+                  <span>🏪</span> Register Shop
+                </a>
               </div>
             )}
           </div>
@@ -417,6 +419,16 @@ export function LaptopView() {
           padding: 2px 8px;
           font-size: 11px;
           border-radius: var(--radius-md);
+        }
+
+        .header-auth-btn {
+          padding: 8px 16px;
+          font-size: var(--font-size-xs);
+          font-weight: 600;
+          border-radius: var(--radius-full);
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
         }
 
         .search-box {
