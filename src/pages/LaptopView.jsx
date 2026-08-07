@@ -405,14 +405,22 @@ export function LaptopView() {
         .shop-badge {
           background: var(--accent-light);
           border: 1px solid var(--border-accent);
-          padding: var(--space-1) var(--space-3);
+          padding: 6px 14px;
           border-radius: var(--radius-full);
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          white-space: nowrap;
         }
 
         .shop-name {
           font-size: var(--font-size-xs);
           font-weight: 700;
           color: var(--accent-primary);
+          white-space: nowrap;
+          max-width: 220px;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .btn-xs {
