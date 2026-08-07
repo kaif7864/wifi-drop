@@ -1,11 +1,15 @@
 /**
  * client/src/config.js
  * Client-side configuration — reads from Vite env vars (VITE_ prefix)
- * In development: proxy to localhost:3000
- * In production: same-origin (served by Express)
  */
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
+const DEFAULT_SERVER_URL = 'https://wifi-drop-server.onrender.com';
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || (
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? ''
+    : DEFAULT_SERVER_URL
+);
 
 export const config = {
   serverUrl: SERVER_URL,
