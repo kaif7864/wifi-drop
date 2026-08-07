@@ -1,10 +1,11 @@
 /**
  * client/src/pages/LaptopView.jsx
- * Modular Clean Laptop Dashboard Page — Uses dedicated components
+ * Modular Clean Laptop Dashboard Page — Uses dedicated components & Auth Context
  */
 
 import { useEffect, useState, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useWebRTC } from '../hooks/useWebRTC';
@@ -27,8 +28,9 @@ function getOrCreateSessionId() {
 }
 
 export function LaptopView() {
-  const sessionId = useMemo(() => getOrCreateSessionId(), []);
-  const { socket, connected } = useSocket('laptop', 'Laptop Dashboard', sessionId);
+  const { shop, logout } = useAuth();
+  const sessionId = useMemo(() => shop?.shopId || getOrCreateSessionId(), [shop]);
+  const { socket, connected } = useSocket('laptop', shop ? shop.shopName : 'Laptop Dashboard', sessionId);
   
   const {
     files, texts,
@@ -193,8 +195,23 @@ export function LaptopView() {
             </button>
           </div>
 
-          {/* Search Input Bar Component */}
-          <SearchBar value={searchQuery} onChange={setSearchQuery} />
+          {/* Search Input Bar Component & Auth Header */}
+          <div className="flex items-center gap-3">
+            <SearchBar value={searchQuery} onChange={setSearchQuery} />
+            {shop ? (
+              <div className="shop-badge flex items-center gap-2">
+                <span className="shop-name">🏪 {shop.shopName}</span>
+                <button className="btn btn-ghost btn-xs" onClick={logout} title="Logout Shop">
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="auth-actions flex items-center gap-2">
+                <a href="/login" className="btn btn-ghost btn-xs">Login</a>
+                <a href="/register" className="btn btn-primary btn-xs">Register Shop</a>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Files View */}
@@ -375,8 +392,27 @@ export function LaptopView() {
           text-align: center;
         }
 
+        .shop-badge {
+          background: var(--accent-light);
+          border: 1px solid var(--border-accent);
+          padding: var(--space-1) var(--space-3);
+          border-radius: var(--radius-full);
+        }
+
+        .shop-name {
+          font-size: var(--font-size-xs);
+          font-weight: 700;
+          color: var(--accent-primary);
+        }
+
+        .btn-xs {
+          padding: 2px 8px;
+          font-size: 11px;
+          border-radius: var(--radius-md);
+        }
+
         .search-box {
-          max-width: 280px;
+          max-width: 240px;
           width: 100%;
         }
 

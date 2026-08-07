@@ -21,14 +21,17 @@ function getSavedDeviceName() {
   }
 }
 
-function getSessionIdFromUrl() {
+function getShopAndSessionFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  return params.get('session') || null;
+  return {
+    sessionId: params.get('session') || null,
+    shopId: params.get('shop') || params.get('session') || 'default',
+  };
 }
 
 export function MobileView() {
   const deviceName = getSavedDeviceName();
-  const sessionId = useMemo(() => getSessionIdFromUrl(), []);
+  const { sessionId, shopId } = useMemo(() => getShopAndSessionFromUrl(), []);
   
   const { socket, connected } = useSocket('mobile', deviceName, sessionId);
   const { uploading, uploadProgress, uploadFiles, sendText } = useTransfer();
@@ -91,7 +94,7 @@ export function MobileView() {
 
     // Strategy 2: Fallback to HTTP API (Local WiFi / Cloud Relay)
     try {
-      await uploadFiles(selectedFiles, deviceName, sessionId);
+      await uploadFiles(selectedFiles, deviceName, sessionId, shopId);
       setUploadStatus('success');
       setSelectedFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -105,7 +108,7 @@ export function MobileView() {
     if (!textInput.trim()) return;
     try {
       setTextStatus(null);
-      await sendText(textInput.trim(), deviceName, sessionId);
+      await sendText(textInput.trim(), deviceName, sessionId, shopId);
       setTextStatus('success');
       setTextInput('');
     } catch {

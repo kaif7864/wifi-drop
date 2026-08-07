@@ -27,7 +27,7 @@ export function useTransfer() {
   }, []);
 
   // ── Upload files from mobile ──────────────────────────────────────────────
-  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null) => {
+  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null, shopId = 'default') => {
     setUploading(true);
     setUploadProgress(0);
     setError(null);
@@ -36,6 +36,7 @@ export function useTransfer() {
     Array.from(fileList).forEach((file) => formData.append('files', file));
     formData.append('deviceName', deviceName);
     if (sessionId) formData.append('sessionId', sessionId);
+    formData.append('shopId', shopId);
 
     try {
       const response = await axios.post(`${BASE_URL}/api/upload`, formData, {
@@ -58,13 +59,14 @@ export function useTransfer() {
   }, []);
 
   // ── Send text from mobile ─────────────────────────────────────────────────
-  const sendText = useCallback(async (text, deviceName, sessionId = null) => {
+  const sendText = useCallback(async (text, deviceName, sessionId = null, shopId = 'default') => {
     setError(null);
     try {
       const response = await axios.post(`${BASE_URL}/api/text`, {
         text,
         deviceName,
         sessionId,
+        shopId,
       });
       return response.data;
     } catch (err) {
