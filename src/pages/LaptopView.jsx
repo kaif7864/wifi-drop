@@ -1,10 +1,10 @@
 /**
  * client/src/pages/LaptopView.jsx
- * Main dashboard shown on laptop — QR code, received files, received texts, WebRTC P2P + Hybrid mode
+ * Comprehensive Dashboard — History, Files, Text Notes, Analytics & Device Controls
  */
 
 import { useEffect, useState, useMemo } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useWebRTC } from '../hooks/useWebRTC';
@@ -21,6 +21,14 @@ function getOrCreateSessionId() {
     sessionStorage.setItem('wifidrop_session_id', id);
   }
   return id;
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export function LaptopView() {
@@ -43,7 +51,9 @@ export function LaptopView() {
 
   const { toasts, addToast, dismiss } = useToast();
   const [connectedDevice, setConnectedDevice] = useState(null);
-  const [activeTab, setActiveTab] = useState('files'); // 'files' | 'texts'
+  const [activeTab, setActiveTab] = useState('files'); // 'files' | 'texts' | 'history' | 'analytics'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [fileFilter, setFileFilter] = useState('all'); // 'all' | 'image' | 'doc' | 'media'
 
   // Fetch existing history on mount
   useEffect(() => {
@@ -109,6 +119,40 @@ export function LaptopView() {
     };
   }, [socket, addReceivedFile, addReceivedText, addToast, sessionId]);
 
+  // Filtered files
+  const filteredFiles = useMemo(() => {
+    return files.filter((f) => {
+      const matchesSearch = f.originalName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            f.deviceName?.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+
+      if (fileFilter === 'image') return f.mimeType?.startsWith('image/');
+      if (fileFilter === 'doc') return f.mimeType?.includes('pdf') || f.mimeType?.includes('text') || f.mimeType?.includes('document');
+      if (fileFilter === 'media') return f.mimeType?.startsWith('video/') || f.mimeType?.startsWith('audio/');
+      return true;
+    });
+  }, [files, searchQuery, fileFilter]);
+
+  // Filtered texts
+  const filteredTexts = useMemo(() => {
+    return texts.filter((t) =>
+      t.text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.deviceName?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [texts, searchQuery]);
+
+  // Combined timeline history
+  const combinedHistory = useMemo(() => {
+    const fileItems = files.map((f) => ({ ...f, itemType: 'file', timestamp: new Date(f.savedAt || f.createdAt).getTime() }));
+    const textItems = texts.map((t) => ({ ...t, itemType: 'text', timestamp: new Date(t.receivedAt || t.createdAt).getTime() }));
+    return [...fileItems, ...textItems].sort((a, b) => b.timestamp - a.timestamp);
+  }, [files, texts]);
+
+  // Total storage calculate
+  const totalStorageSize = useMemo(() => {
+    return files.reduce((acc, curr) => acc + (curr.size || 0), 0);
+  }, [files]);
+
   return (
     <div className="laptop-layout">
       {/* ── Sidebar ── */}
@@ -118,7 +162,7 @@ export function LaptopView() {
           <span className="logo-icon">📡</span>
           <div>
             <h1 className="logo-title">{config.appName}</h1>
-            <p className="logo-sub">Hybrid local & cloud transfer</p>
+            <p className="logo-sub">Local & Cloud Transfer Hub</p>
           </div>
         </div>
 
@@ -128,7 +172,7 @@ export function LaptopView() {
             <div className="flex items-center gap-2">
               <span className={`dot ${connected ? 'dot-success' : 'dot-muted'}`} />
               <span className="status-text">
-                {connected ? 'Ready (Local/Relay)' : 'Connecting...'}
+                {connected ? 'Server Online' : 'Connecting...'}
               </span>
             </div>
             {peerState === 'connected' && (
@@ -137,58 +181,83 @@ export function LaptopView() {
           </div>
         </div>
 
-        {/* QR Code */}
+        {/* QR Code Display */}
         <QRDisplay connectedDevice={connectedDevice} sessionId={sessionId} />
       </aside>
 
-      {/* ── Main content ── */}
+      {/* ── Main Dashboard Content ── */}
       <main className="laptop-main">
-        {/* Header */}
-        <div className="main-header">
+        {/* Header Bar */}
+        <div className="main-header flex items-center justify-between">
+          {/* Navigation Tabs */}
           <div className="tab-bar">
             <button
               className={`tab-btn ${activeTab === 'files' ? 'tab-active' : ''}`}
               onClick={() => setActiveTab('files')}
             >
               📁 Files
-              {files.length > 0 && (
-                <span className="tab-count">{files.length}</span>
-              )}
+              {files.length > 0 && <span className="tab-count">{files.length}</span>}
             </button>
             <button
               className={`tab-btn ${activeTab === 'texts' ? 'tab-active' : ''}`}
               onClick={() => setActiveTab('texts')}
             >
-              📝 Texts
-              {texts.length > 0 && (
-                <span className="tab-count">{texts.length}</span>
-              )}
+              📝 Text Notes
+              {texts.length > 0 && <span className="tab-count">{texts.length}</span>}
             </button>
+            <button
+              className={`tab-btn ${activeTab === 'history' ? 'tab-active' : ''}`}
+              onClick={() => setActiveTab('history')}
+            >
+              📜 Timeline
+              {combinedHistory.length > 0 && <span className="tab-count">{combinedHistory.length}</span>}
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'analytics' ? 'tab-active' : ''}`}
+              onClick={() => setActiveTab('analytics')}
+            >
+              📊 Stats
+            </button>
+          </div>
+
+          {/* Live Search */}
+          <div className="search-box">
+            <input
+              type="text"
+              className="input search-input"
+              placeholder="Search files, texts, devices…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
 
-        {/* File list */}
+        {/* ── Files Tab ── */}
         {activeTab === 'files' && (
           <div className="content-area">
-            {files.length === 0 ? (
+            {/* Filter pills */}
+            <div className="filter-bar flex items-center gap-2">
+              <button className={`filter-chip ${fileFilter === 'all' ? 'active' : ''}`} onClick={() => setFileFilter('all')}>All Files</button>
+              <button className={`filter-chip ${fileFilter === 'image' ? 'active' : ''}`} onClick={() => setFileFilter('image')}>🖼️ Images</button>
+              <button className={`filter-chip ${fileFilter === 'doc' ? 'active' : ''}`} onClick={() => setFileFilter('doc')}>📄 Documents</button>
+              <button className={`filter-chip ${fileFilter === 'media' ? 'active' : ''}`} onClick={() => setFileFilter('media')}>🎬 Audio/Video</button>
+            </div>
+
+            {filteredFiles.length === 0 ? (
               <div className="empty-state">
                 <span className="empty-state-icon">📂</span>
-                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                  No files received yet
+                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                  No files found
                 </p>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                  Scan the QR code on your mobile to start sending files
+                  Scan the QR code on mobile to start transferring files
                 </p>
               </div>
             ) : (
               <div className="file-list">
                 <AnimatePresence mode="popLayout">
-                  {files.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      onDelete={deleteFile}
-                    />
+                  {filteredFiles.map((file) => (
+                    <FileCard key={file.id} file={file} onDelete={deleteFile} />
                   ))}
                 </AnimatePresence>
               </div>
@@ -196,32 +265,90 @@ export function LaptopView() {
           </div>
         )}
 
-        {/* Text list */}
+        {/* ── Text Notes Tab ── */}
         {activeTab === 'texts' && (
           <div className="content-area">
-            {texts.length === 0 ? (
+            {filteredTexts.length === 0 ? (
               <div className="empty-state">
                 <span className="empty-state-icon">💬</span>
-                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                  No texts received yet
+                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                  No text messages received yet
                 </p>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                  Send a text or clipboard content from your mobile
+                  Send text, links, or notes from mobile UI
                 </p>
               </div>
             ) : (
               <div className="file-list">
                 <AnimatePresence mode="popLayout">
-                  {texts.map((t) => (
-                    <TextShare
-                      key={t.id}
-                      textRecord={t}
-                      onDelete={deleteText}
-                    />
+                  {filteredTexts.map((t) => (
+                    <TextShare key={t.id} textRecord={t} onDelete={deleteText} />
                   ))}
                 </AnimatePresence>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Timeline History Tab ── */}
+        {activeTab === 'history' && (
+          <div className="content-area">
+            {combinedHistory.length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-state-icon">📜</span>
+                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                  Transfer History Empty
+                </p>
+              </div>
+            ) : (
+              <div className="file-list">
+                <AnimatePresence mode="popLayout">
+                  {combinedHistory.map((item) => (
+                    item.itemType === 'file' ? (
+                      <FileCard key={item.id} file={item} onDelete={deleteFile} />
+                    ) : (
+                      <TextShare key={item.id} textRecord={item} onDelete={deleteText} />
+                    )
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Analytics & Stats Tab ── */}
+        {activeTab === 'analytics' && (
+          <div className="content-area">
+            <div className="analytics-grid">
+              <div className="stat-card glass-card">
+                <span className="stat-icon">📂</span>
+                <div>
+                  <h3 className="stat-value">{files.length}</h3>
+                  <p className="stat-label">Total Files Received</p>
+                </div>
+              </div>
+              <div className="stat-card glass-card">
+                <span className="stat-icon">💬</span>
+                <div>
+                  <h3 className="stat-value">{texts.length}</h3>
+                  <p className="stat-label">Total Text Notes</p>
+                </div>
+              </div>
+              <div className="stat-card glass-card">
+                <span className="stat-icon">💾</span>
+                <div>
+                  <h3 className="stat-value">{formatBytes(totalStorageSize)}</h3>
+                  <p className="stat-label">Total Size Transferred</p>
+                </div>
+              </div>
+              <div className="stat-card glass-card">
+                <span className="stat-icon">🔑</span>
+                <div>
+                  <h3 className="stat-value">{sessionId}</h3>
+                  <p className="stat-label">Current Session Code</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -236,7 +363,6 @@ export function LaptopView() {
           background: var(--bg-primary);
         }
 
-        /* ── Sidebar ── */
         .laptop-sidebar {
           width: 320px;
           flex-shrink: 0;
@@ -260,10 +386,7 @@ export function LaptopView() {
         .logo-title {
           font-size: var(--font-size-xl);
           font-weight: 700;
-          background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          color: var(--text-primary);
         }
         .logo-sub {
           font-size: var(--font-size-xs);
@@ -279,7 +402,6 @@ export function LaptopView() {
           font-weight: 500;
         }
 
-        /* ── Main content ── */
         .laptop-main {
           flex: 1;
           display: flex;
@@ -288,9 +410,10 @@ export function LaptopView() {
         }
 
         .main-header {
-          padding: var(--space-5) var(--space-8);
+          padding: var(--space-4) var(--space-8);
           border-bottom: 1px solid var(--border);
           background: var(--bg-secondary);
+          gap: var(--space-4);
         }
 
         .tab-bar {
@@ -302,7 +425,7 @@ export function LaptopView() {
           display: flex;
           align-items: center;
           gap: var(--space-2);
-          padding: var(--space-2) var(--space-5);
+          padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-full);
           border: 1px solid transparent;
           background: transparent;
@@ -315,14 +438,14 @@ export function LaptopView() {
         }
 
         .tab-btn:hover {
-          background: var(--bg-glass);
+          background: var(--bg-tertiary);
           color: var(--text-primary);
         }
 
         .tab-active {
-          background: var(--accent-glow) !important;
+          background: var(--accent-light) !important;
           border-color: var(--border-accent) !important;
-          color: var(--accent-secondary) !important;
+          color: var(--accent-primary) !important;
         }
 
         .tab-count {
@@ -336,16 +459,78 @@ export function LaptopView() {
           text-align: center;
         }
 
+        .search-box {
+          max-width: 280px;
+          width: 100%;
+        }
+
+        .search-input {
+          padding: var(--space-2) var(--space-4);
+          font-size: var(--font-size-xs);
+          border-radius: var(--radius-full);
+        }
+
         .content-area {
           flex: 1;
           padding: var(--space-6) var(--space-8);
           overflow-y: auto;
         }
 
+        .filter-bar {
+          margin-bottom: var(--space-5);
+        }
+
+        .filter-chip {
+          padding: var(--space-2) var(--space-4);
+          border-radius: var(--radius-full);
+          border: 1px solid var(--border);
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
+          font-size: var(--font-size-xs);
+          font-weight: 500;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+
+        .filter-chip:hover {
+          border-color: var(--border-hover);
+          color: var(--text-primary);
+        }
+
+        .filter-chip.active {
+          background: var(--accent-primary);
+          color: #fff;
+          border-color: var(--accent-primary);
+        }
+
         .file-list {
           display: flex;
           flex-direction: column;
           gap: var(--space-3);
+        }
+
+        .analytics-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: var(--space-5);
+        }
+
+        .stat-card {
+          padding: var(--space-6);
+          display: flex;
+          align-items: center;
+          gap: var(--space-5);
+        }
+
+        .stat-icon { font-size: 2.2rem; }
+        .stat-value {
+          font-size: var(--font-size-2xl);
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .stat-label {
+          font-size: var(--font-size-xs);
+          color: var(--text-muted);
         }
       `}</style>
     </div>
