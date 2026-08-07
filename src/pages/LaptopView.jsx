@@ -1,10 +1,10 @@
 /**
  * client/src/pages/LaptopView.jsx
- * Modular Clean Laptop Dashboard Page — Uses dedicated components & Auth Context
+ * Multi-View Dedicated Dashboard Page — Renders separate views for Files, Text, History, Standee, Analytics
  */
 
 import { useEffect, useState, useMemo } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
@@ -17,6 +17,8 @@ import { FileCard } from '../components/FileCard';
 import { TextShare } from '../components/TextShare';
 import { TimelineHistory } from '../components/TimelineHistory';
 import { AnalyticsStats } from '../components/AnalyticsStats';
+import { QRStandee } from '../components/QRStandee';
+import { config } from '../config';
 
 function getOrCreateSessionId() {
   let id = sessionStorage.getItem('wifidrop_session_id');
@@ -48,14 +50,25 @@ export function LaptopView() {
 
   const { toasts, addToast, dismiss } = useToast();
   const [connectedDevice, setConnectedDevice] = useState(null);
-  const [activeTab, setActiveTab] = useState('files'); // 'files' | 'texts' | 'history' | 'analytics'
+  const [activeNav, setActiveNav] = useState('files'); // 'files' | 'texts' | 'history' | 'standee' | 'analytics'
   const [searchQuery, setSearchQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('all'); // 'all' | 'image' | 'doc' | 'media'
+  const [qrUrl, setQrUrl] = useState('');
 
   // Fetch existing history on mount
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  // Fetch QR code URL for standee page
+  useEffect(() => {
+    fetch(`${config.serverUrl}/api/qr?session=${encodeURIComponent(sessionId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setQrUrl(data.qrDataUrl);
+      })
+      .catch(() => {});
+  }, [sessionId]);
 
   // Socket event listeners
   useEffect(() => {
@@ -154,6 +167,11 @@ export function LaptopView() {
     <div className="laptop-layout">
       {/* Sidebar Component */}
       <Sidebar
+        activeNav={activeNav}
+        onNavChange={setActiveNav}
+        filesCount={files.length}
+        textsCount={texts.length}
+        historyCount={combinedHistory.length}
         connected={connected}
         peerState={peerState}
         connectedDevice={connectedDevice}
@@ -165,40 +183,22 @@ export function LaptopView() {
       <main className="laptop-main">
         {/* Header Bar */}
         <div className="main-header flex items-center justify-between">
-          {/* Navigation Tabs */}
-          <div className="tab-bar">
-            <button
-              className={`tab-btn ${activeTab === 'files' ? 'tab-active' : ''}`}
-              onClick={() => setActiveTab('files')}
-            >
-              📁 Files
-              {files.length > 0 && <span className="tab-count">{files.length}</span>}
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'texts' ? 'tab-active' : ''}`}
-              onClick={() => setActiveTab('texts')}
-            >
-              📝 Text Notes
-              {texts.length > 0 && <span className="tab-count">{texts.length}</span>}
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'history' ? 'tab-active' : ''}`}
-              onClick={() => setActiveTab('history')}
-            >
-              📜 Timeline
-              {combinedHistory.length > 0 && <span className="tab-count">{combinedHistory.length}</span>}
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'analytics' ? 'tab-active' : ''}`}
-              onClick={() => setActiveTab('analytics')}
-            >
-              📊 Stats
-            </button>
+          <div className="page-heading">
+            <h2 className="view-title">
+              {activeNav === 'files' && '📁 Received Files Manager'}
+              {activeNav === 'texts' && '📝 Text & Clipboard Notes'}
+              {activeNav === 'history' && '📜 Full Transfer Timeline'}
+              {activeNav === 'standee' && '🖨️ Counter QR Standee Studio'}
+              {activeNav === 'analytics' && '📊 Transfer Analytics & Reports'}
+            </h2>
           </div>
 
           {/* Search Input Bar Component & Auth Header */}
           <div className="flex items-center gap-3">
-            <SearchBar value={searchQuery} onChange={setSearchQuery} />
+            {(activeNav === 'files' || activeNav === 'texts' || activeNav === 'history') && (
+              <SearchBar value={searchQuery} onChange={setSearchQuery} />
+            )}
+
             {shop ? (
               <div className="shop-badge flex items-center gap-2">
                 <span className="shop-name">🏪 {shop.shopName}</span>
@@ -215,9 +215,14 @@ export function LaptopView() {
           </div>
         </div>
 
-        {/* Files View */}
-        {activeTab === 'files' && (
-          <div className="content-area">
+        {/* ── 1. DEDICATED FILES PAGE ── */}
+        {activeNav === 'files' && (
+          <motion.div
+            className="content-area"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
             <CategoryFilter currentFilter={fileFilter} onFilterChange={setFileFilter} />
 
             {filteredFiles.length === 0 ? (
@@ -237,12 +242,17 @@ export function LaptopView() {
                 </AnimatePresence>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* Text Notes View */}
-        {activeTab === 'texts' && (
-          <div className="content-area">
+        {/* ── 2. DEDICATED TEXT NOTES PAGE ── */}
+        {activeNav === 'texts' && (
+          <motion.div
+            className="content-area"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
             {filteredTexts.length === 0 ? (
               <div className="empty-state">
                 <span className="empty-state-icon">💬</span>
@@ -260,30 +270,64 @@ export function LaptopView() {
                 </AnimatePresence>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* Timeline History View */}
-        {activeTab === 'history' && (
-          <div className="content-area">
+        {/* ── 3. DEDICATED TIMELINE HISTORY PAGE ── */}
+        {activeNav === 'history' && (
+          <motion.div
+            className="content-area"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
             <TimelineHistory
               combinedHistory={combinedHistory}
               onDeleteFile={deleteFile}
               onDeleteText={deleteText}
             />
-          </div>
+          </motion.div>
         )}
 
-        {/* Analytics & Stats View */}
-        {activeTab === 'analytics' && (
-          <div className="content-area">
+        {/* ── 4. DEDICATED COUNTER STANDEE PAGE ── */}
+        {activeNav === 'standee' && (
+          <motion.div
+            className="content-area flex flex-col items-center justify-center"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="standee-wrapper">
+              <QRStandee
+                shopName={shop?.shopName || 'Shop Counter'}
+                shopId={shop?.shopId || sessionId}
+                mobileUrl={`${config.serverUrl}/mobile?shop=${shop?.shopId || sessionId}`}
+                qrCodeUrl={qrUrl}
+              />
+              <div className="standee-actions flex items-center justify-center gap-3 mt-4">
+                <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
+                  🖨️ Print Counter Standee
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── 5. DEDICATED ANALYTICS PAGE ── */}
+        {activeNav === 'analytics' && (
+          <motion.div
+            className="content-area"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
             <AnalyticsStats
               filesCount={files.length}
               textsCount={texts.length}
               totalStorageSize={totalStorageSize}
               sessionId={sessionId}
             />
-          </div>
+          </motion.div>
         )}
       </main>
 
@@ -298,14 +342,14 @@ export function LaptopView() {
         }
 
         .laptop-sidebar {
-          width: 320px;
+          width: 280px;
           flex-shrink: 0;
           background: var(--bg-secondary);
           border-right: 1px solid var(--border);
-          padding: var(--space-6);
+          padding: var(--space-5);
           display: flex;
           flex-direction: column;
-          gap: var(--space-5);
+          gap: var(--space-4);
           overflow-y: auto;
         }
 
@@ -313,17 +357,17 @@ export function LaptopView() {
           display: flex;
           align-items: center;
           gap: var(--space-3);
-          padding-bottom: var(--space-5);
+          padding-bottom: var(--space-4);
           border-bottom: 1px solid var(--border);
         }
         .logo-icon { font-size: 1.8rem; }
         .logo-title {
-          font-size: var(--font-size-xl);
-          font-weight: 700;
+          font-size: var(--font-size-lg);
+          font-weight: 800;
           color: var(--text-primary);
         }
         .logo-sub {
-          font-size: var(--font-size-xs);
+          font-size: 11px;
           color: var(--text-muted);
         }
 
@@ -350,47 +394,10 @@ export function LaptopView() {
           gap: var(--space-4);
         }
 
-        .tab-bar {
-          display: flex;
-          gap: var(--space-2);
-        }
-
-        .tab-btn {
-          display: flex;
-          align-items: center;
-          gap: var(--space-2);
-          padding: var(--space-2) var(--space-4);
-          border-radius: var(--radius-full);
-          border: 1px solid transparent;
-          background: transparent;
-          color: var(--text-muted);
-          font-family: var(--font-family);
-          font-size: var(--font-size-sm);
-          font-weight: 500;
-          cursor: pointer;
-          transition: all var(--transition-fast);
-        }
-
-        .tab-btn:hover {
-          background: var(--bg-tertiary);
-          color: var(--text-primary);
-        }
-
-        .tab-active {
-          background: var(--accent-light) !important;
-          border-color: var(--border-accent) !important;
-          color: var(--accent-primary) !important;
-        }
-
-        .tab-count {
-          background: var(--accent-primary);
-          color: #fff;
-          border-radius: var(--radius-full);
-          font-size: 10px;
+        .view-title {
+          font-size: var(--font-size-md);
           font-weight: 700;
-          padding: 1px 6px;
-          min-width: 18px;
-          text-align: center;
+          color: var(--text-primary);
         }
 
         .shop-badge {
@@ -429,62 +436,19 @@ export function LaptopView() {
           overflow-y: auto;
         }
 
-        .filter-bar {
-          margin-bottom: var(--space-5);
-        }
-
-        .filter-chip {
-          padding: var(--space-2) var(--space-4);
-          border-radius: var(--radius-full);
-          border: 1px solid var(--border);
-          background: var(--bg-secondary);
-          color: var(--text-secondary);
-          font-size: var(--font-size-xs);
-          font-weight: 500;
-          cursor: pointer;
-          transition: all var(--transition-fast);
-        }
-
-        .filter-chip:hover {
-          border-color: var(--border-hover);
-          color: var(--text-primary);
-        }
-
-        .filter-chip.active {
-          background: var(--accent-primary);
-          color: #fff;
-          border-color: var(--accent-primary);
-        }
-
         .file-list {
           display: flex;
           flex-direction: column;
           gap: var(--space-3);
         }
 
-        .analytics-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: var(--space-5);
+        .standee-wrapper {
+          width: 100%;
+          max-width: 360px;
+          margin: 0 auto;
         }
 
-        .stat-card {
-          padding: var(--space-6);
-          display: flex;
-          align-items: center;
-          gap: var(--space-5);
-        }
-
-        .stat-icon { font-size: 2.2rem; }
-        .stat-value {
-          font-size: var(--font-size-2xl);
-          font-weight: 700;
-          color: var(--text-primary);
-        }
-        .stat-label {
-          font-size: var(--font-size-xs);
-          color: var(--text-muted);
-        }
+        .mt-4 { margin-top: var(--space-4); }
       `}</style>
     </div>
   );
