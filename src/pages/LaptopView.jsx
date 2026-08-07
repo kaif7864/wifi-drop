@@ -1,18 +1,21 @@
 /**
  * client/src/pages/LaptopView.jsx
- * Comprehensive Dashboard — History, Files, Text Notes, Analytics & Device Controls
+ * Modular Clean Laptop Dashboard Page — Uses dedicated components
  */
 
 import { useEffect, useState, useMemo } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useToast, NotificationContainer } from '../components/Notification';
-import { QRDisplay } from '../components/QRDisplay';
+import { Sidebar } from '../components/Sidebar';
+import { SearchBar } from '../components/SearchBar';
+import { CategoryFilter } from '../components/CategoryFilter';
 import { FileCard } from '../components/FileCard';
 import { TextShare } from '../components/TextShare';
-import { config } from '../config';
+import { TimelineHistory } from '../components/TimelineHistory';
+import { AnalyticsStats } from '../components/AnalyticsStats';
 
 function getOrCreateSessionId() {
   let id = sessionStorage.getItem('wifidrop_session_id');
@@ -21,14 +24,6 @@ function getOrCreateSessionId() {
     sessionStorage.setItem('wifidrop_session_id', id);
   }
   return id;
-}
-
-function formatBytes(bytes) {
-  if (!bytes || bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export function LaptopView() {
@@ -119,7 +114,7 @@ export function LaptopView() {
     };
   }, [socket, addReceivedFile, addReceivedText, addToast, sessionId]);
 
-  // Filtered files
+  // Filtered files calculation
   const filteredFiles = useMemo(() => {
     return files.filter((f) => {
       const matchesSearch = f.originalName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,7 +128,7 @@ export function LaptopView() {
     });
   }, [files, searchQuery, fileFilter]);
 
-  // Filtered texts
+  // Filtered texts calculation
   const filteredTexts = useMemo(() => {
     return texts.filter((t) =>
       t.text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -141,51 +136,29 @@ export function LaptopView() {
     );
   }, [texts, searchQuery]);
 
-  // Combined timeline history
+  // Combined timeline history calculation
   const combinedHistory = useMemo(() => {
     const fileItems = files.map((f) => ({ ...f, itemType: 'file', timestamp: new Date(f.savedAt || f.createdAt).getTime() }));
     const textItems = texts.map((t) => ({ ...t, itemType: 'text', timestamp: new Date(t.receivedAt || t.createdAt).getTime() }));
     return [...fileItems, ...textItems].sort((a, b) => b.timestamp - a.timestamp);
   }, [files, texts]);
 
-  // Total storage calculate
+  // Total storage size calculation
   const totalStorageSize = useMemo(() => {
     return files.reduce((acc, curr) => acc + (curr.size || 0), 0);
   }, [files]);
 
   return (
     <div className="laptop-layout">
-      {/* ── Sidebar ── */}
-      <aside className="laptop-sidebar">
-        {/* Logo */}
-        <div className="sidebar-logo">
-          <span className="logo-icon">📡</span>
-          <div>
-            <h1 className="logo-title">{config.appName}</h1>
-            <p className="logo-sub">Local & Cloud Transfer Hub</p>
-          </div>
-        </div>
+      {/* Sidebar Component */}
+      <Sidebar
+        connected={connected}
+        peerState={peerState}
+        connectedDevice={connectedDevice}
+        sessionId={sessionId}
+      />
 
-        {/* Server & Hybrid status */}
-        <div className="server-status glass-card">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className={`dot ${connected ? 'dot-success' : 'dot-muted'}`} />
-              <span className="status-text">
-                {connected ? 'Server Online' : 'Connecting...'}
-              </span>
-            </div>
-            {peerState === 'connected' && (
-              <span className="badge badge-success">P2P WebRTC Direct</span>
-            )}
-          </div>
-        </div>
-
-        {/* QR Code Display */}
-        <QRDisplay connectedDevice={connectedDevice} sessionId={sessionId} />
-      </aside>
-
-      {/* ── Main Dashboard Content ── */}
+      {/* Main Dashboard Content */}
       <main className="laptop-main">
         {/* Header Bar */}
         <div className="main-header flex items-center justify-between">
@@ -220,35 +193,19 @@ export function LaptopView() {
             </button>
           </div>
 
-          {/* Live Search */}
-          <div className="search-box">
-            <input
-              type="text"
-              className="input search-input"
-              placeholder="Search files, texts, devices…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+          {/* Search Input Bar Component */}
+          <SearchBar value={searchQuery} onChange={setSearchQuery} />
         </div>
 
-        {/* ── Files Tab ── */}
+        {/* Files View */}
         {activeTab === 'files' && (
           <div className="content-area">
-            {/* Filter pills */}
-            <div className="filter-bar flex items-center gap-2">
-              <button className={`filter-chip ${fileFilter === 'all' ? 'active' : ''}`} onClick={() => setFileFilter('all')}>All Files</button>
-              <button className={`filter-chip ${fileFilter === 'image' ? 'active' : ''}`} onClick={() => setFileFilter('image')}>🖼️ Images</button>
-              <button className={`filter-chip ${fileFilter === 'doc' ? 'active' : ''}`} onClick={() => setFileFilter('doc')}>📄 Documents</button>
-              <button className={`filter-chip ${fileFilter === 'media' ? 'active' : ''}`} onClick={() => setFileFilter('media')}>🎬 Audio/Video</button>
-            </div>
+            <CategoryFilter currentFilter={fileFilter} onFilterChange={setFileFilter} />
 
             {filteredFiles.length === 0 ? (
               <div className="empty-state">
                 <span className="empty-state-icon">📂</span>
-                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                  No files found
-                </p>
+                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No files found</p>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                   Scan the QR code on mobile to start transferring files
                 </p>
@@ -265,15 +222,13 @@ export function LaptopView() {
           </div>
         )}
 
-        {/* ── Text Notes Tab ── */}
+        {/* Text Notes View */}
         {activeTab === 'texts' && (
           <div className="content-area">
             {filteredTexts.length === 0 ? (
               <div className="empty-state">
                 <span className="empty-state-icon">💬</span>
-                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                  No text messages received yet
-                </p>
+                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No text messages received yet</p>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                   Send text, links, or notes from mobile UI
                 </p>
@@ -290,65 +245,26 @@ export function LaptopView() {
           </div>
         )}
 
-        {/* ── Timeline History Tab ── */}
+        {/* Timeline History View */}
         {activeTab === 'history' && (
           <div className="content-area">
-            {combinedHistory.length === 0 ? (
-              <div className="empty-state">
-                <span className="empty-state-icon">📜</span>
-                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                  Transfer History Empty
-                </p>
-              </div>
-            ) : (
-              <div className="file-list">
-                <AnimatePresence mode="popLayout">
-                  {combinedHistory.map((item) => (
-                    item.itemType === 'file' ? (
-                      <FileCard key={item.id} file={item} onDelete={deleteFile} />
-                    ) : (
-                      <TextShare key={item.id} textRecord={item} onDelete={deleteText} />
-                    )
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
+            <TimelineHistory
+              combinedHistory={combinedHistory}
+              onDeleteFile={deleteFile}
+              onDeleteText={deleteText}
+            />
           </div>
         )}
 
-        {/* ── Analytics & Stats Tab ── */}
+        {/* Analytics & Stats View */}
         {activeTab === 'analytics' && (
           <div className="content-area">
-            <div className="analytics-grid">
-              <div className="stat-card glass-card">
-                <span className="stat-icon">📂</span>
-                <div>
-                  <h3 className="stat-value">{files.length}</h3>
-                  <p className="stat-label">Total Files Received</p>
-                </div>
-              </div>
-              <div className="stat-card glass-card">
-                <span className="stat-icon">💬</span>
-                <div>
-                  <h3 className="stat-value">{texts.length}</h3>
-                  <p className="stat-label">Total Text Notes</p>
-                </div>
-              </div>
-              <div className="stat-card glass-card">
-                <span className="stat-icon">💾</span>
-                <div>
-                  <h3 className="stat-value">{formatBytes(totalStorageSize)}</h3>
-                  <p className="stat-label">Total Size Transferred</p>
-                </div>
-              </div>
-              <div className="stat-card glass-card">
-                <span className="stat-icon">🔑</span>
-                <div>
-                  <h3 className="stat-value">{sessionId}</h3>
-                  <p className="stat-label">Current Session Code</p>
-                </div>
-              </div>
-            </div>
+            <AnalyticsStats
+              filesCount={files.length}
+              textsCount={texts.length}
+              totalStorageSize={totalStorageSize}
+              sessionId={sessionId}
+            />
           </div>
         )}
       </main>
