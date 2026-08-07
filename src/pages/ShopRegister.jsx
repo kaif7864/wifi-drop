@@ -10,37 +10,34 @@ export function ShopRegister() {
   const { register } = useAuth();
   
   const [shopName, setShopName] = useState('');
-  const [shopId, setShopId] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  // Auto-generate shopId slug from shopName
-  const handleNameChange = (e) => {
-    const val = e.target.value;
-    setShopName(val);
-    if (!shopId || shopId === shopName.toLowerCase().replace(/[^a-z0-9]/g, '-')) {
-      setShopId(val.toLowerCase().trim().replace(/[^a-z0-9]/g, '-'));
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    // Auto-generate clean shopId slug behind the scenes
+    const autoShopId = shopName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
     try {
       await register({
         shopName,
-        shopId,
+        shopId: autoShopId || `shop-${Math.random().toString(36).substring(2, 7)}`,
         email,
         password,
-        city,
       });
       window.location.href = '/';
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed.');
+      setError(err.response?.data?.error || 'Registration failed. Try again.');
     } finally {
       setLoading(false);
     }
@@ -52,7 +49,7 @@ export function ShopRegister() {
         <div className="auth-header">
           <span className="auth-logo">🏪</span>
           <h2 className="auth-title">Register Your Shop</h2>
-          <p className="auth-sub">Get your unique shop QR standee in 1 minute</p>
+          <p className="auth-sub">Get your counter QR standee in 30 seconds</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -63,24 +60,11 @@ export function ShopRegister() {
             <input
               type="text"
               className="input"
-              placeholder="e.g. Kaif Print Hub"
+              placeholder="e.g. Ansari Digital Center"
               value={shopName}
-              onChange={handleNameChange}
+              onChange={(e) => setShopName(e.target.value)}
               required
             />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Shop ID / Handle (URL Slug)</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="kaif-print-hub"
-              value={shopId}
-              onChange={(e) => setShopId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-              required
-            />
-            <span className="form-hint">Mobile URL: wifi-drop.com/mobile?shop={shopId || 'your-shop-id'}</span>
           </div>
 
           <div className="form-group">
@@ -88,7 +72,7 @@ export function ShopRegister() {
             <input
               type="email"
               className="input"
-              placeholder="owner@kaifprinthub.com"
+              placeholder="owner@ansaridigital.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -128,8 +112,11 @@ export function ShopRegister() {
         }
         .auth-card {
           width: 100%;
-          max-width: 440px;
+          max-width: 420px;
           padding: var(--space-8);
+          border-radius: var(--radius-xl);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+          background: #ffffff;
         }
         .auth-header {
           text-align: center;
@@ -138,7 +125,7 @@ export function ShopRegister() {
         .auth-logo { font-size: 2.5rem; }
         .auth-title {
           font-size: var(--font-size-xl);
-          font-weight: 700;
+          font-weight: 800;
           color: var(--text-primary);
           margin-top: var(--space-2);
         }
@@ -161,10 +148,6 @@ export function ShopRegister() {
           font-weight: 600;
           color: var(--text-secondary);
         }
-        .form-hint {
-          font-size: 10px;
-          color: var(--text-muted);
-        }
         .auth-footer {
           text-align: center;
           margin-top: var(--space-6);
@@ -173,7 +156,7 @@ export function ShopRegister() {
         }
         .auth-link {
           color: var(--accent-primary);
-          font-weight: 600;
+          font-weight: 700;
           text-decoration: none;
         }
         .alert-error {
