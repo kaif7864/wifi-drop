@@ -27,9 +27,10 @@ export function useSocket(role, deviceName = 'Browser', sessionId = null) {
 
   useEffect(() => {
     const socket = io(config.serverUrl, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      autoConnect: true,
     });
 
     socketRef.current = socket;

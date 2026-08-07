@@ -1,8 +1,8 @@
 /**
  * client/src/config.js
  * Client-side configuration
- * In local dev: empty string (uses Vite proxy to http://localhost:3000)
- * In production: reads VITE_SERVER_URL or falls back to live server
+ * In local dev: connects directly to http://localhost:3000
+ * In production: connects to live backend on Render
  */
 
 const isLocalhost = Boolean(
@@ -13,7 +13,7 @@ const isLocalhost = Boolean(
 );
 
 const SERVER_URL = isLocalhost
-  ? (import.meta.env.VITE_SERVER_URL || '')
+  ? (import.meta.env.VITE_SERVER_URL || 'http://localhost:3000')
   : (import.meta.env.VITE_SERVER_URL || 'https://wifi-drop-server.onrender.com');
 
 export const config = {
