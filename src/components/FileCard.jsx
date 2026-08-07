@@ -148,7 +148,7 @@ export function FileCard({ file, onDelete }) {
           <button
             className="btn-icon btn-danger-icon"
             title="Delete file"
-            onClick={() => onDelete(file.id)}
+            onClick={() => onDelete(file.uuid || file.id || file._id)}
           >
             🗑️
           </button>

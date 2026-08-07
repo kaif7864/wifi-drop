@@ -53,7 +53,7 @@ export function TextShare({ textRecord, onDelete }) {
         <button
           className="btn-icon"
           title="Delete"
-          onClick={() => onDelete(textRecord.id)}
+          onClick={() => onDelete(textRecord.uuid || textRecord.id || textRecord._id)}
           style={{ color: 'var(--danger)' }}
         >
           🗑️

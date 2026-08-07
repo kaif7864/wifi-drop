@@ -75,20 +75,26 @@ export function useTransfer() {
   }, []);
 
   // ── Delete a file (laptop dashboard) ─────────────────────────────────────
-  const deleteFile = useCallback(async (id) => {
+  const deleteFile = useCallback(async (fileOrId) => {
+    const targetId = typeof fileOrId === 'object' ? (fileOrId.uuid || fileOrId.id || fileOrId._id) : fileOrId;
+    if (!targetId) return;
+
     try {
-      await axios.delete(`${BASE_URL}/api/files/${id}`);
-      setFiles((prev) => prev.filter((f) => f.id !== id));
+      await axios.delete(`${BASE_URL}/api/files/${targetId}`);
+      setFiles((prev) => prev.filter((f) => f.id !== targetId && f.uuid !== targetId && f._id !== targetId));
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
   }, []);
 
   // ── Delete a text record ──────────────────────────────────────────────────
-  const deleteText = useCallback(async (id) => {
+  const deleteText = useCallback(async (textOrId) => {
+    const targetId = typeof textOrId === 'object' ? (textOrId.uuid || textOrId.id || textOrId._id) : textOrId;
+    if (!targetId) return;
+
     try {
-      await axios.delete(`${BASE_URL}/api/text/${id}`);
-      setTexts((prev) => prev.filter((t) => t.id !== id));
+      await axios.delete(`${BASE_URL}/api/text/${targetId}`);
+      setTexts((prev) => prev.filter((t) => t.id !== targetId && t.uuid !== targetId && t._id !== targetId));
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
