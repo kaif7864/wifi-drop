@@ -158,6 +158,7 @@ export function LaptopView() {
         peerState={peerState}
         connectedDevice={connectedDevice}
         sessionId={sessionId}
+        shop={shop}
       />
 
       {/* Main Dashboard Content */}

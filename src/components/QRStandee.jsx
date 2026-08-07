@@ -3,18 +3,7 @@
  * Printable Counter QR Standee component for Shop Owners
  */
 
-import { useEffect, useState } from 'react';
-import { generateQRCode } from '../utils/qr';
-
-export function QRStandee({ shopName, shopId, mobileUrl }) {
-  const [qrCodeUrl, setQrCodeUrl] = useState('');
-
-  useEffect(() => {
-    if (mobileUrl) {
-      generateQRCode(mobileUrl).then(setQrCodeUrl);
-    }
-  }, [mobileUrl]);
-
+export function QRStandee({ shopName, shopId, mobileUrl, qrCodeUrl }) {
   return (
     <div className="standee-card glass-card">
       <div className="standee-header">
@@ -32,7 +21,7 @@ export function QRStandee({ shopName, shopId, mobileUrl }) {
       </div>
 
       <div className="standee-footer">
-        <p className="standee-url">wifi-drop.com/mobile?shop={shopId}</p>
+        <p className="standee-url">{mobileUrl || `wifi-drop.com/mobile?shop=${shopId}`}</p>
         <span className="standee-tag">🔒 No Cable · No Login · Direct Drop</span>
       </div>
 
@@ -93,9 +82,10 @@ export function QRStandee({ shopName, shopId, mobileUrl }) {
           margin-top: var(--space-4);
         }
         .standee-url {
-          font-size: var(--font-size-xs);
+          font-size: 11px;
           font-weight: 700;
           color: var(--accent-primary);
+          word-break: break-all;
         }
         .standee-tag {
           display: block;
