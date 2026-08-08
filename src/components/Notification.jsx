@@ -80,8 +80,14 @@ export function useToast() {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback(({ type = 'info', title, message }) => {
-    const id = `${Date.now()}_${Math.random()}`;
-    setToasts((prev) => [...prev, { id, type, title, message }]);
+    setToasts((prev) => {
+      // Ignore identical toast if already visible
+      if (prev.some((t) => t.title === title && t.message === message)) {
+        return prev;
+      }
+      const id = `${Date.now()}_${Math.random()}`;
+      return [...prev, { id, type, title, message }];
+    });
   }, []);
 
   const dismiss = useCallback((id) => {

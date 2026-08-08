@@ -18,16 +18,30 @@ export function useTransfer() {
 
   // ── Push a file received via socket ──────────────────────────────────────
   const addReceivedFile = useCallback((fileRecord) => {
-    setFiles((prev) => [fileRecord, ...prev]);
+    if (!fileRecord) return;
+    setFiles((prev) => {
+      const targetId = fileRecord.uuid || fileRecord.id || fileRecord._id;
+      if (targetId && prev.some((f) => (f.uuid || f.id || f._id) === targetId)) {
+        return prev;
+      }
+      return [fileRecord, ...prev];
+    });
   }, []);
 
   // ── Push a text received via socket ───────────────────────────────────────
   const addReceivedText = useCallback((textRecord) => {
-    setTexts((prev) => [textRecord, ...prev]);
+    if (!textRecord) return;
+    setTexts((prev) => {
+      const targetId = textRecord.uuid || textRecord.id || textRecord._id;
+      if (targetId && prev.some((t) => (t.uuid || t.id || t._id) === targetId)) {
+        return prev;
+      }
+      return [textRecord, ...prev];
+    });
   }, []);
 
   // ── Upload files from mobile ──────────────────────────────────────────────
-  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null, shopId = 'default') => {
+  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null, shopId = 'default', customerId = null, customerName = null) => {
     setUploading(true);
     setUploadProgress(0);
     setError(null);
@@ -37,6 +51,8 @@ export function useTransfer() {
     formData.append('deviceName', deviceName);
     if (sessionId) formData.append('sessionId', sessionId);
     formData.append('shopId', shopId);
+    if (customerId) formData.append('customerId', customerId);
+    if (customerName) formData.append('customerName', customerName);
 
     try {
       const response = await axios.post(`${BASE_URL}/api/upload`, formData, {
@@ -59,7 +75,7 @@ export function useTransfer() {
   }, []);
 
   // ── Send text from mobile ─────────────────────────────────────────────────
-  const sendText = useCallback(async (text, deviceName, sessionId = null, shopId = 'default') => {
+  const sendText = useCallback(async (text, deviceName, sessionId = null, shopId = 'default', customerId = null, customerName = null) => {
     setError(null);
     try {
       const response = await axios.post(`${BASE_URL}/api/text`, {
@@ -67,6 +83,8 @@ export function useTransfer() {
         deviceName,
         sessionId,
         shopId,
+        customerId,
+        customerName,
       });
       return response.data;
     } catch (err) {
@@ -103,16 +121,66 @@ export function useTransfer() {
   }, []);
 
   // ── Fetch existing history on mount ──────────────────────────────────────
-  const fetchHistory = useCallback(async () => {
+  const fetchHistory = useCallback(async (shopId = null) => {
     try {
+      const configObj = shopId ? { params: { shopId } } : {};
       const [fileRes, textRes] = await Promise.all([
-        axios.get(`${BASE_URL}/api/files`),
-        axios.get(`${BASE_URL}/api/text`),
+        axios.get(`${BASE_URL}/api/files`, configObj),
+        axios.get(`${BASE_URL}/api/text`, configObj),
       ]);
       setFiles(fileRes.data.files || []);
       setTexts(textRes.data.texts || []);
     } catch {
       // silently fail on history fetch
+    }
+  }, []);
+
+  // ── Toggle file print status ─────────────────────────────────────────────
+  const togglePrintStatus = useCallback(async (fileOrId) => {
+    const targetId = typeof fileOrId === 'object' ? (fileOrId.uuid || fileOrId.id || fileOrId._id) : fileOrId;
+    if (!targetId) return;
+
+    setFiles((prev) =>
+      prev.map((f) => {
+        const id = f.uuid || f.id || f._id;
+        if (id === targetId || f.uuid === targetId || f.id === targetId || (f._id && String(f._id) === String(targetId))) {
+          return { ...f, printedStatus: !f.printedStatus };
+        }
+        return f;
+      })
+    );
+
+    try {
+      await axios.patch(`${BASE_URL}/api/files/${targetId}/print`);
+    } catch (err) {
+      console.warn('[Print Status Toggle Error]:', err.message);
+    }
+  }, []);
+
+  // ── Delete an entire customer folder ──────────────────────────────────────
+  const deleteCustomerFolder = useCallback(async (customerId) => {
+    if (!customerId) return;
+    try {
+      await axios.delete(`${BASE_URL}/api/files/customer/${encodeURIComponent(customerId)}`);
+      const isName = customerId.startsWith('name_');
+      const rawName = isName ? customerId.replace('name_', '').toLowerCase() : null;
+      const matchHash = customerId.match(/(?:cust_|#)?([A-Z0-9]{6})/i);
+      const hash = matchHash ? matchHash[1].toLowerCase() : null;
+
+      const matchesItem = (item) => {
+        if (isName && item.customerName && item.customerName.toLowerCase().trim() === rawName) return true;
+        if (item.customerId === customerId) return true;
+        if (hash) {
+          if (item.customerId && item.customerId.toLowerCase().includes(hash)) return true;
+          if (item.deviceName && item.deviceName.toLowerCase().includes(`#${hash}`)) return true;
+        }
+        return false;
+      };
+
+      setFiles((prev) => prev.filter((f) => !matchesItem(f)));
+      setTexts((prev) => prev.filter((t) => !matchesItem(t)));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
     }
   }, []);
 
@@ -128,6 +196,8 @@ export function useTransfer() {
     sendText,
     deleteFile,
     deleteText,
+    deleteCustomerFolder,
+    togglePrintStatus,
     fetchHistory,
   };
 }

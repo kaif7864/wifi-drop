@@ -9,7 +9,7 @@ import axios from 'axios';
 import { config } from '../config';
 import { QRStandee } from './QRStandee';
 
-export function QRModal({ isOpen, onClose, sessionId, shopName, shopId }) {
+export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customerId }) {
   const [qrData, setQrData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -20,7 +20,11 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId }) {
     const fetchQR = async () => {
       setLoading(true);
       try {
-        const query = sessionId ? `?session=${encodeURIComponent(sessionId)}` : '';
+        const queryParts = [];
+        if (sessionId) queryParts.push(`session=${encodeURIComponent(sessionId)}`);
+        if (customerId) queryParts.push(`customerId=${encodeURIComponent(customerId)}`);
+        const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+        
         const res = await axios.get(`${config.serverUrl}/api/qr${query}`);
         setQrData(res.data);
       } catch (err) {
@@ -30,7 +34,7 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId }) {
       }
     };
     fetchQR();
-  }, [isOpen, sessionId]);
+  }, [isOpen, sessionId, customerId]);
 
   const handleCopyLink = async () => {
     if (qrData?.url) {
@@ -56,43 +60,60 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId }) {
           {/* Header */}
           <div className="qr-modal-header flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="modal-icon">📱</span>
-              <h3 className="modal-title">Mobile Connect QR</h3>
+              <span className="modal-icon">{customerId ? '📂' : '📱'}</span>
+              <div>
+                <h3 className="modal-title">
+                  {customerId ? `Folder QR: ${shopName}` : 'Mobile Connect QR'}
+                </h3>
+                {customerId && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                    🎯 Target ID: {customerId}
+                  </p>
+                )}
+              </div>
             </div>
             <button className="btn-icon" onClick={onClose} title="Close Modal">✕</button>
           </div>
 
-          {/* Mode Switcher */}
-          <div className="qr-modal-tabs flex gap-2">
-            <button
-              className={`tab-chip ${viewMode === 'qr' ? 'active' : ''}`}
-              onClick={() => setViewMode('qr')}
-            >
-              📱 Digital QR Code
-            </button>
-            <button
-              className={`tab-chip ${viewMode === 'standee' ? 'active' : ''}`}
-              onClick={() => setViewMode('standee')}
-            >
-              🖨️ Counter Standee
-            </button>
-          </div>
+          {/* Mode Switcher (Hide Standee for Folder-Specific QR) */}
+          {!customerId && (
+            <div className="qr-modal-tabs flex gap-2">
+              <button
+                className={`tab-chip ${viewMode === 'qr' ? 'active' : ''}`}
+                onClick={() => setViewMode('qr')}
+              >
+                📱 Digital QR Code
+              </button>
+              <button
+                className={`tab-chip ${viewMode === 'standee' ? 'active' : ''}`}
+                onClick={() => setViewMode('standee')}
+              >
+                🖨️ Counter Standee
+              </button>
+            </div>
+          )}
 
           {/* Body */}
           <div className="qr-modal-body">
-            {viewMode === 'qr' ? (
+            {viewMode === 'qr' || customerId ? (
               <div className="qr-digital-view">
                 {loading ? (
-                  <div className="qr-loading">Generating QR Code…</div>
+                  <div className="qr-loading">Generating Folder QR Code…</div>
                 ) : qrData ? (
                   <>
-                    <div className="qr-img-wrapper">
+                    <div className="qr-img-wrapper" style={{ border: customerId ? '2px solid var(--accent-primary)' : '1px solid var(--border)' }}>
                       <img src={qrData.qrDataUrl} alt="Connect QR" className="qr-img" />
                     </div>
-                    <p className="qr-instruction">Scan with any Mobile Camera / Scanner</p>
+                    <div className="text-center">
+                      <p className="qr-instruction" style={{ fontWeight: 600, color: customerId ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                        {customerId
+                          ? `Scan from any phone to upload directly into "${shopName}"`
+                          : 'Scan with any Mobile Camera / Scanner'}
+                      </p>
+                    </div>
                     
                     <div className="qr-copy-bar flex items-center justify-between">
-                      <span className="url-preview">{qrData.url}</span>
+                      <span className="url-preview" title={qrData.url}>{qrData.url}</span>
                       <button className="btn btn-primary btn-sm" onClick={handleCopyLink}>
                         {copied ? '✓ Copied' : '📋 Copy Link'}
                       </button>

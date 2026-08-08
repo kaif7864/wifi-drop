@@ -39,6 +39,14 @@ export function TextShare({ textRecord, onDelete }) {
         <p className="text-body">{textRecord.text}</p>
         <div className="text-meta">
           <span className="device-tag">{textRecord.deviceName}</span>
+          {textRecord.customerName && (
+            <>
+              <span className="meta-dot">·</span>
+              <span className="customer-tag" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>
+                👤 {textRecord.customerName}
+              </span>
+            </>
+          )}
           <span className="meta-dot">·</span>
           <span>{formatTime(textRecord.receivedAt)}</span>
         </div>

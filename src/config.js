@@ -1,8 +1,7 @@
 /**
  * client/src/config.js
  * Client-side configuration
- * In local dev: connects directly to http://localhost:3000
- * In production: connects to live backend on Render
+ * Dynamic server URL resolution for local LAN Wi-Fi and live production backend
  */
 
 const isLocalhost = Boolean(
@@ -12,8 +11,10 @@ const isLocalhost = Boolean(
   window.location.hostname.startsWith('10.')
 );
 
+const localBackendUrl = `${window.location.protocol}//${window.location.hostname}:3000`;
+
 const SERVER_URL = isLocalhost
-  ? (import.meta.env.VITE_SERVER_URL || 'http://localhost:3000')
+  ? (import.meta.env.VITE_SERVER_URL || localBackendUrl)
   : (import.meta.env.VITE_SERVER_URL || 'https://wifi-drop-server.onrender.com');
 
 export const config = {

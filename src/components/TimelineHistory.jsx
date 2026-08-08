@@ -7,8 +7,8 @@ import { AnimatePresence } from 'framer-motion';
 import { FileCard } from './FileCard';
 import { TextShare } from './TextShare';
 
-export function TimelineHistory({ combinedHistory, onDeleteFile, onDeleteText }) {
-  if (combinedHistory.length === 0) {
+export function TimelineHistory({ combinedHistory, onDeleteFile, onDeleteText, onTogglePrint }) {
+  if (!combinedHistory || combinedHistory.length === 0) {
     return (
       <div className="empty-state">
         <span className="empty-state-icon">📜</span>
@@ -27,9 +27,18 @@ export function TimelineHistory({ combinedHistory, onDeleteFile, onDeleteText })
       <AnimatePresence mode="popLayout">
         {combinedHistory.map((item) => (
           item.itemType === 'file' ? (
-            <FileCard key={item.id} file={item} onDelete={onDeleteFile} />
+            <FileCard
+              key={item.uuid || item.id || item._id}
+              file={item}
+              onDelete={onDeleteFile}
+              onTogglePrint={onTogglePrint}
+            />
           ) : (
-            <TextShare key={item.id} textRecord={item} onDelete={onDeleteText} />
+            <TextShare
+              key={item.uuid || item.id || item._id}
+              textRecord={item}
+              onDelete={onDeleteText}
+            />
           )
         ))}
       </AnimatePresence>

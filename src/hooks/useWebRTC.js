@@ -75,10 +75,22 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
               mimeType: fileMeta.mimeType,
               savedAt: new Date().toISOString(),
               deviceName: fileMeta.deviceName || 'WebRTC Mobile',
+              customerId: fileMeta.customerId || 'cust_anonymous',
+              customerName: fileMeta.customerName || null,
               downloadUrl: fileUrl,
               previewUrl: fileUrl,
               isP2P: true,
             };
+
+            // Sync P2P file to backend storage so it persists in DB/disk and survives page refresh (F5)
+            try {
+              const formData = new FormData();
+              formData.append('files', new File([blob], fileMeta.name, { type: fileMeta.mimeType }));
+              formData.append('deviceName', fileMeta.deviceName || 'WebRTC Mobile');
+              if (fileMeta.customerId) formData.append('customerId', fileMeta.customerId);
+              if (fileMeta.customerName) formData.append('customerName', fileMeta.customerName);
+              fetch(`${config.serverUrl}/api/upload`, { method: 'POST', body: formData }).catch(() => {});
+            } catch {}
 
             if (onFileReceived) onFileReceived(fileRecord);
             incomingFileRef.current = { buffer: [], meta: null, receivedSize: 0 };
@@ -144,7 +156,7 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
   }, [socket, sessionId, createPeerConnection, setupDataChannelEvents]);
 
   // Send file via WebRTC DataChannel
-  const sendFileP2P = useCallback((file, deviceName, onProgress) => {
+  const sendFileP2P = useCallback((file, deviceName, customerId = null, customerName = null, onProgress = null) => {
     return new Promise((resolve, reject) => {
       const channel = dataChannelRef.current;
       if (!channel || channel.readyState !== 'open') {
@@ -159,6 +171,8 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
           size: file.size,
           mimeType: file.type || 'application/octet-stream',
           deviceName,
+          customerId,
+          customerName,
         },
       }));
 

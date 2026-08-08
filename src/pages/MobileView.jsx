@@ -9,6 +9,8 @@ import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { ProgressBar } from '../components/ProgressBar';
+import { getHardwareFingerprint } from '../utils/fingerprint';
+import { stageUploadInQueue, getStagedQueue, clearStagedItem } from '../utils/offlineQueue';
 import { config } from '../config';
 
 const DEVICE_NAME_KEY = 'wifidrop_device_name';
@@ -23,17 +25,29 @@ function getSavedDeviceName() {
 
 function getShopAndSessionFromUrl() {
   const params = new URLSearchParams(window.location.search);
+  let targetCustId = params.get('customerId') || null;
+  
+  if (targetCustId) {
+    try { sessionStorage.setItem('wifidrop_target_customer_id', targetCustId); } catch {}
+  } else {
+    try { targetCustId = sessionStorage.getItem('wifidrop_target_customer_id') || null; } catch {}
+  }
+
   return {
     sessionId: params.get('session') || null,
     shopId: params.get('shop') || params.get('session') || 'default',
+    targetCustomerId: targetCustId,
   };
 }
 
 export function MobileView() {
   const deviceName = getSavedDeviceName();
-  const { sessionId, shopId } = useMemo(() => getShopAndSessionFromUrl(), []);
+  const { sessionId, shopId, targetCustomerId } = useMemo(() => getShopAndSessionFromUrl(), []);
   
-  const { socket, connected } = useSocket('mobile', deviceName, sessionId);
+  const customerFp = useMemo(() => getHardwareFingerprint(), []);
+  const effectiveDeviceName = customerFp?.deviceName || deviceName;
+  const effectiveCustomerId = targetCustomerId || customerFp?.customerId;
+  const { socket, connected } = useSocket('mobile', effectiveDeviceName, sessionId);
   const { uploading, uploadProgress, uploadFiles, sendText } = useTransfer();
 
   const { peerState, initiateConnect, sendFileP2P } = useWebRTC({
@@ -49,6 +63,15 @@ export function MobileView() {
   const [isP2pUploading, setIsP2pUploading] = useState(false);
   const [textStatus, setTextStatus] = useState(null);
   const [activeMode, setActiveMode] = useState('file'); // 'file' | 'text'
+  const [customerName, setCustomerName] = useState(() => {
+    try { return localStorage.getItem('wifidrop_customer_name') || ''; } catch { return ''; }
+  });
+
+  const handleNameChange = (e) => {
+    const val = e.target.value;
+    setCustomerName(val);
+    try { localStorage.setItem('wifidrop_customer_name', val); } catch {}
+  };
 
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -65,7 +88,35 @@ export function MobileView() {
     if (files.length > 0) setSelectedFiles(files);
   };
 
-  // Hybrid file upload strategy: try P2P WebRTC DataChannel if open, else HTTP upload
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+
+  // Auto-flush offline queue when internet connection restores
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      getStagedQueue().then(async (queue) => {
+        for (const item of queue) {
+          try {
+            if (item.type === 'text') {
+              await sendText(item.text, item.deviceName, item.sessionId, item.shopId, item.customerId, item.customerName);
+            }
+            await clearStagedItem(item.id);
+          } catch {}
+        }
+      });
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [sendText]);
+
+  // Hybrid file upload strategy: try P2P WebRTC DataChannel -> HTTP upload -> Offline IndexedDB Queue
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
     setUploadStatus(null);
@@ -76,7 +127,7 @@ export function MobileView() {
         setIsP2pUploading(true);
         setP2pProgress(0);
         for (const file of selectedFiles) {
-          await sendFileP2P(file, deviceName, (progress) => {
+          await sendFileP2P(file, effectiveDeviceName, effectiveCustomerId, customerName.trim() || null, (progress) => {
             setP2pProgress(progress);
           });
         }
@@ -92,15 +143,29 @@ export function MobileView() {
       }
     }
 
-    // Strategy 2: Fallback to HTTP API (Local WiFi / Cloud Relay)
+    // Strategy 2 & 3: HTTP API (Cloud Relay / Local LAN Direct Server)
     try {
-      await uploadFiles(selectedFiles, deviceName, sessionId, shopId);
+      await uploadFiles(selectedFiles, effectiveDeviceName, sessionId, shopId, effectiveCustomerId, customerName.trim() || null);
       setUploadStatus('success');
       setSelectedFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (cameraInputRef.current) cameraInputRef.current.value = '';
-    } catch {
-      setUploadStatus('error');
+    } catch (err) {
+      // Strategy 4: Disconnection Offline Queue in IndexedDB
+      if (!isOnline) {
+        stageUploadInQueue({
+          type: 'files',
+          fileNames: selectedFiles.map(f => f.name),
+          deviceName: effectiveDeviceName,
+          sessionId,
+          shopId,
+          customerId: effectiveCustomerId,
+          customerName: customerName.trim() || null,
+        });
+        setUploadStatus('queued');
+      } else {
+        setUploadStatus('error');
+      }
     }
   };
 
@@ -108,11 +173,25 @@ export function MobileView() {
     if (!textInput.trim()) return;
     try {
       setTextStatus(null);
-      await sendText(textInput.trim(), deviceName, sessionId, shopId);
+      await sendText(textInput.trim(), effectiveDeviceName, sessionId, shopId, effectiveCustomerId, customerName.trim() || null);
       setTextStatus('success');
       setTextInput('');
     } catch {
-      setTextStatus('error');
+      if (!isOnline) {
+        stageUploadInQueue({
+          type: 'text',
+          text: textInput.trim(),
+          deviceName: effectiveDeviceName,
+          sessionId,
+          shopId,
+          customerId: customerFp?.customerId,
+          customerName: customerName.trim() || null,
+        });
+        setTextStatus('queued');
+        setTextInput('');
+      } else {
+        setTextStatus('error');
+      }
     }
   };
 
@@ -152,12 +231,33 @@ export function MobileView() {
         </div>
       </header>
 
-      {/* Sub-header */}
+      {/* Sub-header & Optional Name Input */}
       <div className="mobile-sub-header">
-        <p className="mobile-sub-title">Send to Laptop</p>
-        {sessionId && (
-          <p className="mobile-session-tag">Session ID: {sessionId}</p>
+        {targetCustomerId && (
+          <div
+            className="target-folder-banner glass-card p-2 mb-2 flex items-center justify-between text-xs"
+            style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: '10px', color: '#4F46E5', fontWeight: 600 }}
+          >
+            <span>🔗 Directing to Folder: <strong>{targetCustomerId}</strong></span>
+            <span className="badge badge-accent">Folder QR</span>
+          </div>
         )}
+        <div className="mobile-name-card glass-card">
+          <div className="mobile-name-icon">👤</div>
+          <div className="mobile-name-content">
+            <div className="flex items-center justify-between">
+              <label className="mobile-name-label">YOUR NAME / TOKEN NO.</label>
+              <span className="mobile-name-badge">Optional</span>
+            </div>
+            <input
+              type="text"
+              className="mobile-name-input"
+              placeholder="e.g. Ramesh Kumar"
+              value={customerName}
+              onChange={handleNameChange}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Mode tabs */}
@@ -348,6 +448,76 @@ export function MobileView() {
           flex-direction: column;
           max-width: 480px;
           margin: 0 auto;
+        }
+
+        .mobile-sub-header {
+          padding: var(--space-3) var(--space-4);
+          background: var(--bg-primary);
+        }
+
+        .mobile-name-card {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          background: #ffffff;
+          padding: var(--space-3) var(--space-4);
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--border-accent);
+          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.06);
+        }
+
+        .mobile-name-icon {
+          font-size: 1.2rem;
+          background: var(--accent-light);
+          color: var(--accent-primary);
+          width: 38px;
+          height: 38px;
+          border-radius: var(--radius-md);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .mobile-name-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .mobile-name-label {
+          font-size: 10px;
+          font-weight: 800;
+          color: var(--accent-primary);
+          letter-spacing: 0.05em;
+        }
+
+        .mobile-name-badge {
+          font-size: 9px;
+          font-weight: 700;
+          color: var(--text-muted);
+          background: var(--bg-tertiary);
+          padding: 1px 6px;
+          border-radius: var(--radius-full);
+        }
+
+        .mobile-name-input {
+          border: none;
+          background: transparent;
+          font-size: var(--font-size-sm);
+          font-weight: 600;
+          color: var(--text-primary);
+          outline: none;
+          padding: 0;
+          width: 100%;
+        }
+
+        .mobile-name-input::placeholder {
+          color: var(--text-muted);
+          font-weight: 400;
+          font-size: var(--font-size-xs);
         }
 
         .mobile-header {

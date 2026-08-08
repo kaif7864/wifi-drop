@@ -11,6 +11,7 @@ export function Sidebar({
   activeNav,
   onNavChange,
   filesCount,
+  unprintedCount = 0,
   textsCount,
   historyCount,
   connected,
@@ -22,7 +23,8 @@ export function Sidebar({
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   const navItems = [
-    { id: 'files', icon: '📁', label: 'Received Files', count: filesCount },
+    { id: 'customer_folders', icon: '📂', label: 'Customer Folders', count: unprintedCount },
+    { id: 'files', icon: '📄', label: 'All Files Stream', count: filesCount },
     { id: 'texts', icon: '📝', label: 'Text Notes', count: textsCount },
     { id: 'history', icon: '📜', label: 'Full History', count: historyCount },
     { id: 'standee', icon: '🖨️', label: 'Counter QR Standee' },

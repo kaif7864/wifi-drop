@@ -17,14 +17,15 @@ import { FileCard } from '../components/FileCard';
 import { TextShare } from '../components/TextShare';
 import { TimelineHistory } from '../components/TimelineHistory';
 import { AnalyticsStats } from '../components/AnalyticsStats';
+import { CustomerFolders } from '../components/CustomerFolders';
 import { QRStandee } from '../components/QRStandee';
 import { config } from '../config';
 
 function getOrCreateSessionId() {
-  let id = sessionStorage.getItem('wifidrop_session_id');
+  let id = localStorage.getItem('wifidrop_session_id');
   if (!id) {
     id = `wd_${Math.random().toString(36).substring(2, 9)}`;
-    sessionStorage.setItem('wifidrop_session_id', id);
+    localStorage.setItem('wifidrop_session_id', id);
   }
   return id;
 }
@@ -38,8 +39,12 @@ export function LaptopView() {
     files, texts,
     addReceivedFile, addReceivedText,
     deleteFile, deleteText,
+    deleteCustomerFolder,
+    togglePrintStatus,
     fetchHistory,
   } = useTransfer();
+
+  const unprintedCount = useMemo(() => files.filter((f) => !f.printedStatus).length, [files]);
 
   const { peerState } = useWebRTC({
     socket,
@@ -50,15 +55,17 @@ export function LaptopView() {
 
   const { toasts, addToast, dismiss } = useToast();
   const [connectedDevice, setConnectedDevice] = useState(null);
-  const [activeNav, setActiveNav] = useState('files'); // 'files' | 'texts' | 'history' | 'standee' | 'analytics'
+  const [activeNav, setActiveNav] = useState('customer_folders'); // 'customer_folders' | 'files' | 'texts' | 'history' | 'standee' | 'analytics'
   const [searchQuery, setSearchQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('all'); // 'all' | 'image' | 'doc' | 'media'
   const [qrUrl, setQrUrl] = useState('');
 
   // Fetch existing history on mount
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    if (sessionId) {
+      fetchHistory(sessionId);
+    }
+  }, [fetchHistory, sessionId]);
 
   // Fetch QR code URL for standee page
   useEffect(() => {
@@ -170,6 +177,7 @@ export function LaptopView() {
         activeNav={activeNav}
         onNavChange={setActiveNav}
         filesCount={files.length}
+        unprintedCount={unprintedCount}
         textsCount={texts.length}
         historyCount={combinedHistory.length}
         connected={connected}
@@ -185,7 +193,8 @@ export function LaptopView() {
         <div className="main-header flex items-center justify-between">
           <div className="page-heading">
             <h2 className="view-title">
-              {activeNav === 'files' && '📁 Received Files Manager'}
+              {activeNav === 'customer_folders' && '📂 Customer Folders Workspace'}
+              {activeNav === 'files' && '📄 All Received Files Stream'}
               {activeNav === 'texts' && '📝 Text & Clipboard Notes'}
               {activeNav === 'history' && '📜 Full Transfer Timeline'}
               {activeNav === 'standee' && '🖨️ Counter QR Standee Studio'}
@@ -217,6 +226,27 @@ export function LaptopView() {
           </div>
         </div>
 
+        {/* ── 0. DEDICATED CUSTOMER FOLDERS PAGE ── */}
+        {activeNav === 'customer_folders' && (
+          <motion.div
+            className="content-area"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <CustomerFolders
+              files={files}
+              texts={texts}
+              onDeleteFile={deleteFile}
+              onDeleteText={deleteText}
+              onDeleteFolder={deleteCustomerFolder}
+              onTogglePrint={togglePrintStatus}
+              sessionId={sessionId}
+              shop={shop}
+            />
+          </motion.div>
+        )}
+
         {/* ── 1. DEDICATED FILES PAGE ── */}
         {activeNav === 'files' && (
           <motion.div
@@ -239,7 +269,12 @@ export function LaptopView() {
               <div className="file-list">
                 <AnimatePresence mode="popLayout">
                   {filteredFiles.map((file) => (
-                    <FileCard key={file.id} file={file} onDelete={deleteFile} />
+                    <FileCard
+                      key={file.uuid || file.id || file._id}
+                      file={file}
+                      onDelete={deleteFile}
+                      onTogglePrint={togglePrintStatus}
+                    />
                   ))}
                 </AnimatePresence>
               </div>
@@ -267,7 +302,7 @@ export function LaptopView() {
               <div className="file-list">
                 <AnimatePresence mode="popLayout">
                   {filteredTexts.map((t) => (
-                    <TextShare key={t.id} textRecord={t} onDelete={deleteText} />
+                    <TextShare key={t.uuid || t.id || t._id} textRecord={t} onDelete={deleteText} />
                   ))}
                 </AnimatePresence>
               </div>
@@ -287,6 +322,7 @@ export function LaptopView() {
               combinedHistory={combinedHistory}
               onDeleteFile={deleteFile}
               onDeleteText={deleteText}
+              onTogglePrint={togglePrintStatus}
             />
           </motion.div>
         )}

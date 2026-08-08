@@ -36,9 +36,10 @@ function getFileIcon(mimeType = '') {
   return '📁';
 }
 
-export function FileCard({ file, onDelete }) {
+export function FileCard({ file, onDelete, onTogglePrint }) {
   const [showPreview, setShowPreview] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const isPrinted = file.printedStatus || false;
 
   const isImage = IMAGE_TYPES.includes(file.mimeType);
   const isPdf = file.mimeType === PDF_TYPE;
@@ -47,8 +48,16 @@ export function FileCard({ file, onDelete }) {
   
   const canPreview = isImage || isPdf || isVideo || isAudio;
 
-  const previewUrl = file.isP2P ? file.previewUrl : `${config.serverUrl}${file.previewUrl}`;
-  const downloadUrl = file.isP2P ? file.downloadUrl : `${config.serverUrl}${file.downloadUrl}`;
+  const getFullUrl = (urlStr) => {
+    if (!urlStr) return '';
+    if (urlStr.startsWith('http://') || urlStr.startsWith('https://') || urlStr.startsWith('blob:')) {
+      return urlStr;
+    }
+    return `${config.serverUrl}${urlStr}`;
+  };
+
+  const previewUrl = file.isP2P ? file.previewUrl : getFullUrl(file.previewUrl);
+  const downloadUrl = file.isP2P ? file.downloadUrl : getFullUrl(file.downloadUrl);
 
   // Direct trigger download handling
   const handleDownload = async () => {
@@ -87,14 +96,14 @@ export function FileCard({ file, onDelete }) {
     window.open(previewUrl, '_blank');
   };
 
-  const [isPrinted, setIsPrinted] = useState(file.printedStatus || false);
-
   const togglePrint = async () => {
-    const nextVal = !isPrinted;
-    setIsPrinted(nextVal);
-    try {
-      await axios.patch(`${config.serverUrl}/api/files/${file.uuid || file.id || file._id}/print`);
-    } catch {}
+    if (onTogglePrint) {
+      onTogglePrint(file);
+    } else {
+      try {
+        await axios.patch(`${config.serverUrl}/api/files/${file.uuid || file.id || file._id}/print`);
+      } catch {}
+    }
   };
 
   return (
@@ -124,8 +133,15 @@ export function FileCard({ file, onDelete }) {
                   <span className="device-tag">{file.deviceName}</span>
                 </>
               )}
+              {file.customerName && (
+                <>
+                  <span className="meta-dot">·</span>
+                  <span className="customer-tag" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>
+                    👤 {file.customerName}
+                  </span>
+                </>
+              )}
               {file.isP2P && <span className="badge badge-accent">P2P</span>}
-              {isPrinted && <span className="badge badge-success">✓ Printed</span>}
             </div>
           </div>
         </div>

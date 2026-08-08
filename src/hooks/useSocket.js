@@ -37,14 +37,14 @@ export function useSocket(role, deviceName = 'Browser', sessionId = null) {
 
     socket.on('connect', () => {
       setConnected(true);
-      // Identify this client & join session room
-      socket.emit('device_identify', { name: deviceNameRef.current, role: roleRef.current });
       if (sessionIdRef.current) {
         socket.emit('join_session', {
           sessionId: sessionIdRef.current,
           name: deviceNameRef.current,
           role: roleRef.current,
         });
+      } else {
+        socket.emit('device_identify', { name: deviceNameRef.current, role: roleRef.current });
       }
     });
 
