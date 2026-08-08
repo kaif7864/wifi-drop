@@ -73,7 +73,8 @@ export function MobileView() {
     try { localStorage.setItem('wifidrop_customer_name', val); } catch {}
   };
 
-  const fileInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const docInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
   // Trigger WebRTC peer connect attempt when socket connects in a session
@@ -84,8 +85,23 @@ export function MobileView() {
   }, [connected, sessionId, initiateConnect]);
 
   const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) setSelectedFiles(files);
+    const newFiles = Array.from(e.target.files || []);
+    if (newFiles.length > 0) {
+      setSelectedFiles((prev) => {
+        const existingKeys = new Set(prev.map((f) => `${f.name}_${f.size}`));
+        const filtered = newFiles.filter((f) => !existingKeys.has(`${f.name}_${f.size}`));
+        return [...prev, ...filtered];
+      });
+    }
+    e.target.value = '';
+  };
+
+  const removeSelectedFile = (indexToRemove) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== indexToRemove));
+  };
+
+  const clearAllSelectedFiles = () => {
+    setSelectedFiles([]);
   };
 
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
@@ -133,7 +149,8 @@ export function MobileView() {
         }
         setUploadStatus('success');
         setSelectedFiles([]);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (galleryInputRef.current) galleryInputRef.current.value = '';
+        if (docInputRef.current) docInputRef.current.value = '';
         if (cameraInputRef.current) cameraInputRef.current.value = '';
         return;
       } catch (err) {
@@ -148,7 +165,8 @@ export function MobileView() {
       await uploadFiles(selectedFiles, effectiveDeviceName, sessionId, shopId, effectiveCustomerId, customerName.trim() || null);
       setUploadStatus('success');
       setSelectedFiles([]);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
+      if (docInputRef.current) docInputRef.current.value = '';
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     } catch (err) {
       // Strategy 4: Disconnection Offline Queue in IndexedDB
@@ -220,13 +238,13 @@ export function MobileView() {
           <span className="mobile-logo-text">{config.appName}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`dot ${connected ? 'dot-success' : 'dot-muted'}`} />
+          <span className="dot dot-success" />
           <span className="mobile-status-text">
             {peerState === 'connected'
-              ? 'P2P WebRTC Direct'
+              ? '⚡ P2P Direct'
               : connected
-              ? 'Connected (Relay)'
-              : 'Connecting...'}
+              ? '🟢 Live Relay'
+              : '☁️ Cloud Inbox Ready'}
           </span>
         </div>
       </header>
@@ -291,13 +309,22 @@ export function MobileView() {
             >
               {/* Hidden file inputs */}
               <input
-                ref={fileInputRef}
+                ref={galleryInputRef}
                 type="file"
                 multiple
-                accept="*/*"
+                accept="image/*,video/*"
                 style={{ display: 'none' }}
                 onChange={handleFileChange}
-                id="file-picker"
+                id="gallery-picker"
+              />
+              <input
+                ref={docInputRef}
+                type="file"
+                multiple
+                accept="application/pdf,.doc,.docx,.xls,.xlsx,.txt,application/zip"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+                id="doc-picker"
               />
               <input
                 ref={cameraInputRef}
@@ -311,30 +338,87 @@ export function MobileView() {
 
               {/* Pick buttons */}
               <div className="pick-buttons">
-                <label htmlFor="file-picker" className="pick-card glass-card">
-                  <span className="pick-icon">📁</span>
-                  <span className="pick-label">Choose Files</span>
-                  <span className="pick-sub">Any file type</span>
+                <label htmlFor="gallery-picker" className="pick-card glass-card">
+                  <span className="pick-icon">🖼️</span>
+                  <span className="pick-label">Photos & Gallery</span>
+                  <span className="pick-sub">Phone photos</span>
+                </label>
+                <label htmlFor="doc-picker" className="pick-card glass-card">
+                  <span className="pick-icon">📄</span>
+                  <span className="pick-label">PDFs & Docs</span>
+                  <span className="pick-sub">Documents</span>
                 </label>
                 <label htmlFor="camera-picker" className="pick-card glass-card">
                   <span className="pick-icon">📷</span>
                   <span className="pick-label">Camera</span>
-                  <span className="pick-sub">Capture & send</span>
+                  <span className="pick-sub">Live photo</span>
                 </label>
               </div>
 
-              {/* Selected file list */}
+              {/* Selected file tray with accumulation & individual delete (X) */}
               {selectedFiles.length > 0 && (
                 <div className="selected-files glass-card">
-                  <p className="selected-label">
-                    {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="selected-label" style={{ fontWeight: 800, color: 'var(--accent-primary)' }}>
+                      📥 Ready to Send ({selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''})
+                    </p>
+                    <button className="btn-text-danger" onClick={clearAllSelectedFiles}>
+                      Clear All 🗑️
+                    </button>
+                  </div>
                   {selectedFiles.map((f, i) => (
-                    <div key={i} className="selected-file-row">
-                      <span className="selected-file-name">{f.name}</span>
-                      <span className="selected-file-size">
-                        {(f.size / 1024).toFixed(1)} KB
-                      </span>
+                    <div
+                      key={`${f.name}_${i}`}
+                      className="file-item-card"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        background: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '12px',
+                        padding: '10px 12px',
+                        marginBottom: '8px',
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
+                        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>
+                          {f.type?.startsWith('image/') ? '🖼️' : f.type?.includes('pdf') ? '📄' : '📁'}
+                        </span>
+                        <span
+                          title={f.name}
+                          style={{
+                            display: 'block',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            color: '#1E293B',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1,
+                            minWidth: 0,
+                          }}
+                        >
+                          {f.name}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
+                          {(f.size / 1024).toFixed(1)} KB
+                        </span>
+                        <button
+                          className="btn-remove-selected"
+                          onClick={() => removeSelectedFile(i)}
+                          title="Remove file"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -447,7 +531,10 @@ export function MobileView() {
           display: flex;
           flex-direction: column;
           max-width: 480px;
+          width: 100%;
           margin: 0 auto;
+          overflow-x: hidden !important;
+          box-sizing: border-box;
         }
 
         .mobile-sub-header {
@@ -606,8 +693,39 @@ export function MobileView() {
 
         .pick-buttons {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--space-4);
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+        }
+
+        .btn-remove-selected {
+          background: #FEE2E2;
+          color: #EF4444;
+          border: 1px solid #FCA5A5;
+          border-radius: 9999px;
+          width: 22px;
+          height: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 800;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          line-height: 1;
+        }
+
+        .btn-remove-selected:hover {
+          background: #EF4444;
+          color: #ffffff;
+        }
+
+        .btn-text-danger {
+          background: transparent;
+          border: none;
+          color: #EF4444;
+          font-size: 0.72rem;
+          font-weight: 700;
+          cursor: pointer;
         }
 
         .pick-card {
@@ -658,20 +776,40 @@ export function MobileView() {
           letter-spacing: 0.05em;
         }
 
+        .selected-files {
+          padding: var(--space-4);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+          width: 100%;
+          max-width: 100%;
+          overflow-x: hidden;
+          box-sizing: border-box;
+        }
+
         .selected-file-row {
           display: flex;
           justify-content: space-between;
           align-items: center;
           gap: var(--space-3);
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          overflow: hidden;
+          box-sizing: border-box;
         }
 
         .selected-file-name {
+          display: block !important;
           font-size: var(--font-size-xs);
           color: var(--text-secondary);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
           flex: 1;
+          min-width: 0 !important;
+          width: 100% !important;
+          word-break: break-all;
         }
 
         .selected-file-size {

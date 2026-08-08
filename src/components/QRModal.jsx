@@ -4,10 +4,12 @@
  */
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { config } from '../config';
 import { QRStandee } from './QRStandee';
+import { generateClientQR } from '../utils/qr';
 
 export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customerId }) {
   const [qrData, setQrData] = useState(null);
@@ -19,19 +21,34 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
     if (!isOpen) return;
     const fetchQR = async () => {
       setLoading(true);
+      const queryParts = [];
+      if (sessionId) queryParts.push(`session=${encodeURIComponent(sessionId)}`);
+      if (customerId) queryParts.push(`customerId=${encodeURIComponent(customerId)}`);
+      const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
       try {
-        const queryParts = [];
-        if (sessionId) queryParts.push(`session=${encodeURIComponent(sessionId)}`);
-        if (customerId) queryParts.push(`customerId=${encodeURIComponent(customerId)}`);
-        const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-        
+        // 1. Fetch real Wi-Fi IP address URL from backend /api/qr (e.g. http://10.120.60.171:5173/mobile...)
         const res = await axios.get(`${config.serverUrl}/api/qr${query}`);
-        setQrData(res.data);
+        if (res.data && res.data.url) {
+          const lanUrl = res.data.url;
+          const qrImage = await generateClientQR(lanUrl);
+          setQrData({
+            qrDataUrl: qrImage || res.data.qrDataUrl,
+            url: lanUrl,
+          });
+          setLoading(false);
+          return;
+        }
       } catch (err) {
-        console.error('Failed to load QR:', err);
-      } finally {
-        setLoading(false);
+        console.warn('[QR Fetch Warning]:', err.message);
       }
+
+      // 2. Fallback only if backend /api/qr is unreachable
+      const host = window.location.origin;
+      const fallbackUrl = `${host}/mobile${query}`;
+      const fallbackQr = await generateClientQR(fallbackUrl);
+      setQrData({ qrDataUrl: fallbackQr, url: fallbackUrl });
+      setLoading(false);
     };
     fetchQR();
   }, [isOpen, sessionId, customerId]);
@@ -46,7 +63,7 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <div className="qr-modal-overlay" onClick={onClose}>
         <motion.div
@@ -137,10 +154,13 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
         <style>{`
           .qr-modal-overlay {
             position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.6);
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.75);
             backdrop-filter: blur(8px);
-            z-index: 500;
+            z-index: 99999;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -185,34 +205,53 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
             color: var(--accent-primary);
             box-shadow: var(--shadow-sm);
           }
+          .qr-loading {
+            padding: var(--space-8);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: var(--font-size-sm);
+          }
           .qr-digital-view {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: var(--space-4);
+            justify-content: center;
+            width: 100%;
+            text-align: center;
+            gap: 0.75rem;
           }
           .qr-img-wrapper {
-            padding: var(--space-4);
-            background: #f8fafc;
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--border);
+            background: #ffffff;
+            padding: 16px;
+            border-radius: var(--radius-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
           }
           .qr-img {
-            width: 200px;
-            height: 200px;
+            width: 210px;
+            height: 210px;
             display: block;
           }
           .qr-instruction {
             font-size: var(--font-size-xs);
-            color: var(--text-muted);
-            font-weight: 500;
+            color: var(--text-secondary);
+            text-align: center;
+            margin: 0 auto;
           }
           .qr-copy-bar {
             width: 100%;
-            padding: var(--space-2) var(--space-3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
             background: var(--bg-tertiary);
-            border-radius: var(--radius-md);
+            padding: 8px 12px;
+            border-radius: var(--radius-lg);
             border: 1px solid var(--border);
+            margin-top: 6px;
           }
           .url-preview {
             font-size: 11px;
@@ -221,10 +260,11 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            max-width: 220px;
+            max-width: 230px;
           }
         `}</style>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

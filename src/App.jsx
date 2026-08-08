@@ -22,6 +22,10 @@ export default function App() {
   const [route, setRoute] = useState(getCurrentRoute);
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem('wifidrop_theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
     const handlePopState = () => setRoute(getCurrentRoute());
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);

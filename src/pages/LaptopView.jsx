@@ -1,6 +1,6 @@
 /**
  * client/src/pages/LaptopView.jsx
- * Multi-View Dedicated Dashboard Page — Renders separate views for Files, Text, History, Standee, Analytics
+ * Multi-Page Professional Dashboard — 8 Core Pages
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -16,10 +16,20 @@ import { CategoryFilter } from '../components/CategoryFilter';
 import { FileCard } from '../components/FileCard';
 import { TextShare } from '../components/TextShare';
 import { TimelineHistory } from '../components/TimelineHistory';
-import { AnalyticsStats } from '../components/AnalyticsStats';
 import { CustomerFolders } from '../components/CustomerFolders';
 import { QRStandee } from '../components/QRStandee';
 import { config } from '../config';
+import { playNotificationSound } from '../utils/audio';
+import { t } from '../utils/i18n';
+
+// New page components
+import { DashboardPage } from './dashboard/DashboardPage';
+import { PrintPage } from './dashboard/PrintPage';
+import { CustomersPage } from './dashboard/CustomersPage';
+import { BillingPage } from './dashboard/BillingPage';
+import { AnalyticsPage } from './dashboard/AnalyticsPage';
+import { QRManagementPage } from './dashboard/QRManagementPage';
+import { SettingsPage } from './dashboard/SettingsPage';
 
 function getOrCreateSessionId() {
   let id = localStorage.getItem('wifidrop_session_id');
@@ -30,11 +40,27 @@ function getOrCreateSessionId() {
   return id;
 }
 
+// Page title mapping
+const PAGE_TITLES = {
+  dashboard: '📊 Dashboard',
+  customer_folders: '📂 Customer Folders',
+  files: '📄 All Files Stream',
+  texts: '📝 Text Notes',
+  print: '🖨️ Print Management',
+  billing: '💳 Billing & Invoicing',
+  customers: '👥 Customer Management',
+  analytics: '📊 Reports & Analytics',
+  qr_management: '📱 QR Code Manager',
+  history: '📜 Full History',
+  standee: '🖼️ Counter Standee',
+  settings: '⚙️ Shop Settings',
+};
+
 export function LaptopView() {
   const { shop, logout } = useAuth();
   const sessionId = useMemo(() => shop?.shopId || getOrCreateSessionId(), [shop]);
   const { socket, connected } = useSocket('laptop', shop ? shop.shopName : 'Laptop Dashboard', sessionId);
-  
+
   const {
     files, texts,
     addReceivedFile, addReceivedText,
@@ -55,25 +81,46 @@ export function LaptopView() {
 
   const { toasts, addToast, dismiss } = useToast();
   const [connectedDevice, setConnectedDevice] = useState(null);
-  const [activeNav, setActiveNav] = useState('customer_folders'); // 'customer_folders' | 'files' | 'texts' | 'history' | 'standee' | 'analytics'
+  const [activeNav, setActiveNav] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [fileFilter, setFileFilter] = useState('all'); // 'all' | 'image' | 'doc' | 'media'
+  const [fileFilter, setFileFilter] = useState('all');
   const [qrUrl, setQrUrl] = useState('');
+  const [lang, setLang] = useState(() => localStorage.getItem('wifidrop_lang') || 'en');
 
-  // Fetch existing history on mount
+  // Fetch existing history on mount & auto-sync when laptop turns ON or comes back online (WhatsApp Store & Forward)
   useEffect(() => {
-    if (sessionId) {
+    if (!sessionId) return;
+
+    // 1. Initial fetch on mount
+    fetchHistory(sessionId);
+
+    // 2. Periodic background sync every 10 seconds to catch offline uploads
+    const interval = setInterval(() => {
+      fetchHistory(sessionId);
+    }, 10000);
+
+    // 3. Window focus / laptop wake-up sync
+    const handleFocus = () => fetchHistory(sessionId);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchHistory, sessionId]);
+
+  // Sync history immediately whenever WebSocket reconnects
+  useEffect(() => {
+    if (connected && sessionId) {
       fetchHistory(sessionId);
     }
-  }, [fetchHistory, sessionId]);
+  }, [connected, sessionId, fetchHistory]);
 
   // Fetch QR code URL for standee page
   useEffect(() => {
     fetch(`${config.serverUrl}/api/qr?session=${encodeURIComponent(sessionId)}`)
       .then((res) => res.json())
-      .then((data) => {
-        if (data.success) setQrUrl(data.qrDataUrl);
-      })
+      .then((data) => { if (data.success) setQrUrl(data.qrDataUrl); })
       .catch(() => {});
   }, [sessionId]);
 
@@ -83,40 +130,22 @@ export function LaptopView() {
 
     const onFileReceived = (fileRecord) => {
       addReceivedFile(fileRecord);
-      addToast({
-        type: 'success',
-        title: '📁 File Received',
-        message: `"${fileRecord.originalName}" from ${fileRecord.deviceName}`,
-      });
+      playNotificationSound();
+      addToast({ type: 'success', title: '📁 File Received', message: `"${fileRecord.originalName}" from ${fileRecord.deviceName}` });
     };
-
     const onTextReceived = (textRecord) => {
       addReceivedText(textRecord);
-      addToast({
-        type: 'info',
-        title: '📝 Text Received',
-        message: `From ${textRecord.deviceName}`,
-      });
+      playNotificationSound();
+      addToast({ type: 'info', title: '📝 Text Received', message: `From ${textRecord.deviceName}` });
     };
-
     const onDeviceConnected = (device) => {
       setConnectedDevice(device);
-      addToast({
-        type: 'success',
-        title: '📱 Device Connected',
-        message: `${device.name} joined session ${sessionId}`,
-      });
+      addToast({ type: 'success', title: '📱 Device Connected', message: `${device.name} joined` });
     };
-
     const onDeviceDisconnected = (device) => {
       setConnectedDevice(null);
-      addToast({
-        type: 'info',
-        title: 'Device Disconnected',
-        message: `${device.name} left`,
-      });
+      addToast({ type: 'info', title: 'Device Disconnected', message: `${device.name} left` });
     };
-
     const onUploadError = ({ message }) => {
       addToast({ type: 'error', title: 'Upload Error', message });
     };
@@ -136,13 +165,12 @@ export function LaptopView() {
     };
   }, [socket, addReceivedFile, addReceivedText, addToast, sessionId]);
 
-  // Filtered files calculation
+  // Filtered files
   const filteredFiles = useMemo(() => {
     return files.filter((f) => {
       const matchesSearch = f.originalName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             f.deviceName?.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
-
       if (fileFilter === 'image') return f.mimeType?.startsWith('image/');
       if (fileFilter === 'doc') return f.mimeType?.includes('pdf') || f.mimeType?.includes('text') || f.mimeType?.includes('document');
       if (fileFilter === 'media') return f.mimeType?.startsWith('video/') || f.mimeType?.startsWith('audio/');
@@ -150,29 +178,25 @@ export function LaptopView() {
     });
   }, [files, searchQuery, fileFilter]);
 
-  // Filtered texts calculation
-  const filteredTexts = useMemo(() => {
-    return texts.filter((t) =>
+  const filteredTexts = useMemo(() =>
+    texts.filter((t) =>
       t.text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.deviceName?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [texts, searchQuery]);
+    ), [texts, searchQuery]);
 
-  // Combined timeline history calculation
   const combinedHistory = useMemo(() => {
     const fileItems = files.map((f) => ({ ...f, itemType: 'file', timestamp: new Date(f.savedAt || f.createdAt).getTime() }));
     const textItems = texts.map((t) => ({ ...t, itemType: 'text', timestamp: new Date(t.receivedAt || t.createdAt).getTime() }));
     return [...fileItems, ...textItems].sort((a, b) => b.timestamp - a.timestamp);
   }, [files, texts]);
 
-  // Total storage size calculation
-  const totalStorageSize = useMemo(() => {
-    return files.reduce((acc, curr) => acc + (curr.size || 0), 0);
-  }, [files]);
+  const totalStorageSize = useMemo(() => files.reduce((acc, curr) => acc + (curr.size || 0), 0), [files]);
+
+  // Show search for text-heavy views
+  const showSearch = ['files', 'texts', 'history'].includes(activeNav);
 
   return (
     <div className="laptop-layout">
-      {/* Sidebar Component */}
       <Sidebar
         activeNav={activeNav}
         onNavChange={setActiveNav}
@@ -187,33 +211,20 @@ export function LaptopView() {
         shop={shop}
       />
 
-      {/* Main Dashboard Content */}
       <main className="laptop-main">
         {/* Header Bar */}
         <div className="main-header flex items-center justify-between">
           <div className="page-heading">
-            <h2 className="view-title">
-              {activeNav === 'customer_folders' && '📂 Customer Folders Workspace'}
-              {activeNav === 'files' && '📄 All Received Files Stream'}
-              {activeNav === 'texts' && '📝 Text & Clipboard Notes'}
-              {activeNav === 'history' && '📜 Full Transfer Timeline'}
-              {activeNav === 'standee' && '🖨️ Counter QR Standee Studio'}
-              {activeNav === 'analytics' && '📊 Transfer Analytics & Reports'}
-            </h2>
+            <h2 className="view-title">{PAGE_TITLES[activeNav] || 'Dashboard'}</h2>
           </div>
 
-          {/* Search Input Bar Component & Auth Header */}
           <div className="flex items-center gap-3">
-            {(activeNav === 'files' || activeNav === 'texts' || activeNav === 'history') && (
-              <SearchBar value={searchQuery} onChange={setSearchQuery} />
-            )}
+            {showSearch && <SearchBar value={searchQuery} onChange={setSearchQuery} />}
 
             {shop ? (
               <div className="shop-badge flex items-center gap-2">
                 <span className="shop-name">🏪 {shop.shopName}</span>
-                <button className="btn btn-ghost btn-xs" onClick={logout} title="Logout Shop">
-                  Logout
-                </button>
+                <button className="btn btn-ghost btn-xs" onClick={logout}>Logout</button>
               </div>
             ) : (
               <div className="auth-actions flex items-center gap-2">
@@ -226,150 +237,151 @@ export function LaptopView() {
           </div>
         </div>
 
-        {/* ── 0. DEDICATED CUSTOMER FOLDERS PAGE ── */}
-        {activeNav === 'customer_folders' && (
+        {/* Page Content */}
+        <AnimatePresence mode="wait">
           <motion.div
+            key={activeNav}
             className="content-area"
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
-            <CustomerFolders
-              files={files}
-              texts={texts}
-              onDeleteFile={deleteFile}
-              onDeleteText={deleteText}
-              onDeleteFolder={deleteCustomerFolder}
-              onTogglePrint={togglePrintStatus}
-              sessionId={sessionId}
-              shop={shop}
-            />
-          </motion.div>
-        )}
-
-        {/* ── 1. DEDICATED FILES PAGE ── */}
-        {activeNav === 'files' && (
-          <motion.div
-            className="content-area"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <CategoryFilter currentFilter={fileFilter} onFilterChange={setFileFilter} />
-
-            {filteredFiles.length === 0 ? (
-              <div className="empty-state">
-                <span className="empty-state-icon">📂</span>
-                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No files found</p>
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                  Scan the QR code on mobile to start transferring files
-                </p>
-              </div>
-            ) : (
-              <div className="file-list">
-                <AnimatePresence mode="popLayout">
-                  {filteredFiles.map((file) => (
-                    <FileCard
-                      key={file.uuid || file.id || file._id}
-                      file={file}
-                      onDelete={deleteFile}
-                      onTogglePrint={togglePrintStatus}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* ── 2. DEDICATED TEXT NOTES PAGE ── */}
-        {activeNav === 'texts' && (
-          <motion.div
-            className="content-area"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            {filteredTexts.length === 0 ? (
-              <div className="empty-state">
-                <span className="empty-state-icon">💬</span>
-                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No text messages received yet</p>
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                  Send text, links, or notes from mobile UI
-                </p>
-              </div>
-            ) : (
-              <div className="file-list">
-                <AnimatePresence mode="popLayout">
-                  {filteredTexts.map((t) => (
-                    <TextShare key={t.uuid || t.id || t._id} textRecord={t} onDelete={deleteText} />
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* ── 3. DEDICATED TIMELINE HISTORY PAGE ── */}
-        {activeNav === 'history' && (
-          <motion.div
-            className="content-area"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <TimelineHistory
-              combinedHistory={combinedHistory}
-              onDeleteFile={deleteFile}
-              onDeleteText={deleteText}
-              onTogglePrint={togglePrintStatus}
-            />
-          </motion.div>
-        )}
-
-        {/* ── 4. DEDICATED COUNTER STANDEE PAGE ── */}
-        {activeNav === 'standee' && (
-          <motion.div
-            className="content-area flex flex-col items-center justify-center"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="standee-wrapper">
-              <QRStandee
-                shopName={shop?.shopName || 'Shop Counter'}
-                shopId={shop?.shopId || sessionId}
-                mobileUrl={`${config.serverUrl}/mobile?shop=${shop?.shopId || sessionId}`}
-                qrCodeUrl={qrUrl}
+            {/* ── 0. DASHBOARD ── */}
+            {activeNav === 'dashboard' && (
+              <DashboardPage
+                files={files}
+                texts={texts}
+                onNavChange={setActiveNav}
+                sessionId={sessionId}
+                shop={shop}
               />
-              <div className="standee-actions flex items-center justify-center gap-3 mt-4">
-                <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
-                  🖨️ Print Counter Standee
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
+            )}
 
-        {/* ── 5. DEDICATED ANALYTICS PAGE ── */}
-        {activeNav === 'analytics' && (
-          <motion.div
-            className="content-area"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <AnalyticsStats
-              filesCount={files.length}
-              textsCount={texts.length}
-              totalStorageSize={totalStorageSize}
-              sessionId={sessionId}
-            />
+            {/* ── 1. CUSTOMER FOLDERS ── */}
+            {activeNav === 'customer_folders' && (
+              <CustomerFolders
+                files={files}
+                texts={texts}
+                onDeleteFile={deleteFile}
+                onDeleteText={deleteText}
+                onDeleteFolder={deleteCustomerFolder}
+                onTogglePrint={togglePrintStatus}
+                sessionId={sessionId}
+                shop={shop}
+              />
+            )}
+
+            {/* ── 2. ALL FILES ── */}
+            {activeNav === 'files' && (
+              <>
+                <CategoryFilter currentFilter={fileFilter} onFilterChange={setFileFilter} />
+                {filteredFiles.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-state-icon">📂</span>
+                    <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No files found</p>
+                    <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                      Scan the QR code on mobile to start transferring files
+                    </p>
+                  </div>
+                ) : (
+                  <div className="file-list">
+                    <AnimatePresence mode="popLayout">
+                      {filteredFiles.map((file) => (
+                        <FileCard
+                          key={file.uuid || file.id || file._id}
+                          file={file}
+                          onDelete={deleteFile}
+                          onTogglePrint={togglePrintStatus}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── 3. TEXT NOTES ── */}
+            {activeNav === 'texts' && (
+              filteredTexts.length === 0 ? (
+                <div className="empty-state">
+                  <span className="empty-state-icon">💬</span>
+                  <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No text messages received yet</p>
+                  <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Send text, links, or notes from mobile UI</p>
+                </div>
+              ) : (
+                <div className="file-list">
+                  <AnimatePresence mode="popLayout">
+                    {filteredTexts.map((t) => (
+                      <TextShare key={t.uuid || t.id || t._id} textRecord={t} onDelete={deleteText} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )
+            )}
+
+            {/* ── 4. PRINT MANAGEMENT ── */}
+            {activeNav === 'print' && (
+              <PrintPage files={files} onTogglePrint={togglePrintStatus} shop={shop} />
+            )}
+
+            {/* ── 5. BILLING ── */}
+            {activeNav === 'billing' && (
+              <BillingPage files={files} texts={texts} shop={shop} />
+            )}
+
+            {/* ── 6. CUSTOMERS ── */}
+            {activeNav === 'customers' && (
+              <CustomersPage files={files} texts={texts} onNavChange={setActiveNav} onDeleteFolder={deleteCustomerFolder} />
+            )}
+
+            {/* ── 7. ANALYTICS ── */}
+            {activeNav === 'analytics' && (
+              <AnalyticsPage files={files} texts={texts} />
+            )}
+
+            {/* ── 8. QR MANAGEMENT ── */}
+            {activeNav === 'qr_management' && (
+              <QRManagementPage sessionId={sessionId} shop={shop} files={files} />
+            )}
+
+            {/* ── 9. HISTORY ── */}
+            {activeNav === 'history' && (
+              <TimelineHistory
+                combinedHistory={combinedHistory}
+                onDeleteFile={deleteFile}
+                onDeleteText={deleteText}
+                onTogglePrint={togglePrintStatus}
+              />
+            )}
+
+            {/* ── 10. STANDEE ── */}
+            {activeNav === 'standee' && (
+              <div className="flex flex-col items-center justify-center">
+                <div className="standee-wrapper">
+                  <QRStandee
+                    shopName={shop?.shopName || 'Shop Counter'}
+                    shopId={shop?.shopId || sessionId}
+                    mobileUrl={`${config.serverUrl}/mobile?shop=${shop?.shopId || sessionId}`}
+                    qrCodeUrl={qrUrl}
+                  />
+                  <div className="flex items-center justify-center gap-3 mt-4">
+                    <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
+                      🖨️ Print Counter Standee
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── 11. SETTINGS ── */}
+            {activeNav === 'settings' && (
+              <SettingsPage shop={shop} sessionId={sessionId} />
+            )}
           </motion.div>
-        )}
+        </AnimatePresence>
       </main>
 
-      {/* Toasts */}
       <NotificationContainer toasts={toasts} onDismiss={dismiss} />
 
       <style>{`
@@ -380,14 +392,17 @@ export function LaptopView() {
         }
 
         .laptop-sidebar {
-          width: 280px;
+          width: 260px;
           flex-shrink: 0;
           background: var(--bg-secondary);
           border-right: 1px solid var(--border);
-          padding: var(--space-5);
+          padding: var(--space-5) var(--space-4);
           display: flex;
           flex-direction: column;
-          gap: var(--space-4);
+          min-height: 100vh;
+          position: sticky;
+          top: 0;
+          height: 100vh;
           overflow-y: auto;
         }
 
@@ -397,43 +412,36 @@ export function LaptopView() {
           gap: var(--space-3);
           padding-bottom: var(--space-4);
           border-bottom: 1px solid var(--border);
-        }
-        .logo-icon { font-size: 1.8rem; }
-        .logo-title {
-          font-size: var(--font-size-lg);
-          font-weight: 800;
-          color: var(--text-primary);
-        }
-        .logo-sub {
-          font-size: 11px;
-          color: var(--text-muted);
+          margin-bottom: var(--space-2);
         }
 
-        .server-status {
-          padding: var(--space-3) var(--space-4);
-        }
-        .status-text {
-          font-size: var(--font-size-xs);
-          color: var(--text-muted);
-          font-weight: 500;
-        }
+        .logo-icon { font-size: 1.8rem; }
+        .logo-title { font-size: var(--font-size-lg); font-weight: 800; color: var(--text-primary); }
+        .logo-sub { font-size: 11px; color: var(--text-muted); }
+
+        .server-status { padding: var(--space-3) var(--space-4); }
+        .status-text { font-size: var(--font-size-xs); color: var(--text-muted); font-weight: 500; }
 
         .laptop-main {
           flex: 1;
           display: flex;
           flex-direction: column;
           min-width: 0;
+          min-height: 100vh;
         }
 
         .main-header {
-          padding: var(--space-4) var(--space-8);
+          padding: var(--space-4) var(--space-6);
           border-bottom: 1px solid var(--border);
           background: var(--bg-secondary);
           gap: var(--space-4);
+          position: sticky;
+          top: 0;
+          z-index: 10;
         }
 
         .view-title {
-          font-size: var(--font-size-md);
+          font-size: 1.05rem;
           font-weight: 700;
           color: var(--text-primary);
         }
@@ -453,57 +461,22 @@ export function LaptopView() {
           font-size: var(--font-size-xs);
           font-weight: 700;
           color: var(--accent-primary);
-          white-space: nowrap;
-          max-width: 220px;
+          max-width: 200px;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .btn-xs {
-          padding: 2px 8px;
-          font-size: 11px;
-          border-radius: var(--radius-md);
-        }
-
-        .header-auth-btn {
-          padding: 8px 16px;
-          font-size: var(--font-size-xs);
-          font-weight: 600;
-          border-radius: var(--radius-full);
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .search-box {
-          max-width: 240px;
-          width: 100%;
-        }
-
-        .search-input {
-          padding: var(--space-2) var(--space-4);
-          font-size: var(--font-size-xs);
-          border-radius: var(--radius-full);
-        }
+        .btn-xs { padding: 3px 8px; font-size: 11px; border-radius: var(--radius-md); }
+        .header-auth-btn { padding: 7px 14px; font-size: var(--font-size-xs); font-weight: 600; border-radius: var(--radius-full); display: inline-flex; align-items: center; gap: 6px; }
 
         .content-area {
           flex: 1;
-          padding: var(--space-6) var(--space-8);
+          padding: 1.5rem 2rem;
           overflow-y: auto;
         }
 
-        .file-list {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-3);
-        }
-
-        .standee-wrapper {
-          width: 100%;
-          max-width: 360px;
-          margin: 0 auto;
-        }
-
+        .file-list { display: flex; flex-direction: column; gap: var(--space-3); }
+        .standee-wrapper { width: 100%; max-width: 360px; margin: 0 auto; }
         .mt-4 { margin-top: var(--space-4); }
       `}</style>
     </div>

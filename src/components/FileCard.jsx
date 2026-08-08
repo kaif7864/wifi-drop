@@ -3,7 +3,7 @@
  * Displays a received file with full preview, open-in-tab, direct download, and delete actions
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { config } from '../config';
 
@@ -36,10 +36,24 @@ function getFileIcon(mimeType = '') {
   return '📁';
 }
 
+import { isFileInBill, toggleFileInBill } from '../utils/billManager';
+
 export function FileCard({ file, onDelete, onTogglePrint }) {
   const [showPreview, setShowPreview] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const fileId = file.uuid || file.id || file._id;
+  const [addedToBill, setAddedToBill] = useState(() => isFileInBill(fileId));
   const isPrinted = file.printedStatus || false;
+
+  // Sync bill status with global storage updates
+  useEffect(() => {
+    const syncBillState = () => {
+      setAddedToBill(isFileInBill(fileId));
+    };
+    syncBillState();
+    window.addEventListener('wifidrop_bill_items_updated', syncBillState);
+    return () => window.removeEventListener('wifidrop_bill_items_updated', syncBillState);
+  }, [fileId]);
 
   const isImage = IMAGE_TYPES.includes(file.mimeType);
   const isPdf = file.mimeType === PDF_TYPE;
@@ -47,6 +61,12 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
   const isAudio = AUDIO_TYPES.some((t) => file.mimeType?.includes(t) || file.mimeType?.startsWith('audio/'));
   
   const canPreview = isImage || isPdf || isVideo || isAudio;
+
+  const handleAddToBill = (e) => {
+    e.stopPropagation();
+    const res = toggleFileInBill(file);
+    setAddedToBill(res.added);
+  };
 
   const getFullUrl = (urlStr) => {
     if (!urlStr) return '';
@@ -117,14 +137,20 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
         layout
       >
         {/* Left: icon + info */}
-        <div className="file-left">
-          <div className="file-icon">{getFileIcon(file.mimeType)}</div>
-          <div className="file-info">
-            <p className="file-name" title={file.originalName}>
+        <div className="file-left" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+          <div className="file-icon" style={{ flexShrink: 0 }}>{getFileIcon(file.mimeType)}</div>
+          <div className="file-info" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+            <p className="file-name" title={file.originalName} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, width: '100%' }}>
               {file.originalName}
             </p>
             <div className="file-meta">
               <span>{formatBytes(file.size)}</span>
+              {file.pageCount && file.pageCount > 1 && (
+                <>
+                  <span className="meta-dot">·</span>
+                  <span style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>📄 {file.pageCount} Pages</span>
+                </>
+              )}
               <span className="meta-dot">·</span>
               <span>{formatTime(file.savedAt)}</span>
               {file.deviceName && (
@@ -148,6 +174,14 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
 
         {/* Right: actions */}
         <div className="file-actions">
+          <button
+            className={`btn-print-toggle ${addedToBill ? 'printed' : ''}`}
+            style={{ background: addedToBill ? '#ECFDF5' : '#EEF2FF', color: addedToBill ? '#059669' : '#4F46E5', border: '1px solid #C7D2FE' }}
+            title="Add File to Customer Bill Queue"
+            onClick={handleAddToBill}
+          >
+            {addedToBill ? '✓ Added to Bill' : '💳 Add to Bill'}
+          </button>
           <button
             className={`btn-print-toggle ${isPrinted ? 'printed' : ''}`}
             title="Toggle Printed Status"

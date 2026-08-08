@@ -1,9 +1,28 @@
 /**
  * client/src/components/QRStandee.jsx
  * Printable Counter QR Standee component for Shop Owners
+ * Auto-generates QR code client-side if server QR URL is pending
  */
 
+import { useState, useEffect } from 'react';
+import { generateClientQR } from '../utils/qr';
+
 export function QRStandee({ shopName, shopId, mobileUrl, qrCodeUrl }) {
+  const [localQr, setLocalQr] = useState(qrCodeUrl || null);
+
+  useEffect(() => {
+    if (qrCodeUrl) {
+      setLocalQr(qrCodeUrl);
+      return;
+    }
+    const targetUrl = mobileUrl || `${window.location.origin}/mobile?shop=${encodeURIComponent(shopId || 'default')}`;
+    generateClientQR(targetUrl).then((url) => {
+      if (url) setLocalQr(url);
+    });
+  }, [qrCodeUrl, mobileUrl, shopId]);
+
+  const displayUrl = mobileUrl || `${window.location.origin}/mobile?shop=${shopId || 'default'}`;
+
   return (
     <div className="standee-card glass-card">
       <div className="standee-header">
@@ -13,15 +32,15 @@ export function QRStandee({ shopName, shopId, mobileUrl, qrCodeUrl }) {
       </div>
 
       <div className="standee-qr-box">
-        {qrCodeUrl ? (
-          <img src={qrCodeUrl} alt="Counter QR Code" className="standee-qr" />
+        {localQr ? (
+          <img src={localQr} alt="Counter QR Code" className="standee-qr" />
         ) : (
           <div className="standee-placeholder">Generating QR…</div>
         )}
       </div>
 
       <div className="standee-footer">
-        <p className="standee-url">{mobileUrl || `wifi-drop.com/mobile?shop=${shopId}`}</p>
+        <p className="standee-url">{displayUrl}</p>
         <span className="standee-tag">🔒 No Cable · No Login · Direct Drop</span>
       </div>
 

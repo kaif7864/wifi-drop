@@ -67,12 +67,37 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
             const { meta: fileMeta, buffer } = incomingFileRef.current;
             const blob = new Blob(buffer, { type: fileMeta.mimeType });
             const fileUrl = URL.createObjectURL(blob);
+
+            let pageCount = 1;
+            const isPdf = (fileMeta.mimeType && fileMeta.mimeType.includes('pdf')) || (fileMeta.name && fileMeta.name.toLowerCase().endsWith('.pdf'));
+            if (isPdf && buffer.length > 0) {
+              try {
+                // Combine array buffer chunks
+                const totalBytes = buffer.reduce((acc, b) => acc + (b.byteLength || 0), 0);
+                const combined = new Uint8Array(totalBytes);
+                let off = 0;
+                for (const chunk of buffer) {
+                  combined.set(new Uint8Array(chunk), off);
+                  off += chunk.byteLength;
+                }
+                const str = new TextDecoder('latin1').decode(combined);
+                const countMatches = [...str.matchAll(/\/Count\s+(\d+)/g)];
+                if (countMatches.length > 0) {
+                  const maxCount = Math.max(...countMatches.map((m) => parseInt(m[1], 10)));
+                  if (maxCount > 0 && maxCount < 10000) pageCount = maxCount;
+                } else {
+                  const pageMatches = str.match(/\/Type\s*\/Page\b/g);
+                  if (pageMatches && pageMatches.length > 0) pageCount = pageMatches.length;
+                }
+              } catch {}
+            }
             
             const fileRecord = {
               id: `${Date.now()}_${Math.random()}`,
               originalName: fileMeta.name,
               size: fileMeta.size,
               mimeType: fileMeta.mimeType,
+              pageCount,
               savedAt: new Date().toISOString(),
               deviceName: fileMeta.deviceName || 'WebRTC Mobile',
               customerId: fileMeta.customerId || 'cust_anonymous',
@@ -200,6 +225,10 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
       reader.onerror = (err) => reject(err);
 
       function readNextChunk() {
+        if (channel && channel.bufferedAmount > 64 * 1024) {
+          setTimeout(readNextChunk, 15);
+          return;
+        }
         const slice = file.slice(offset, offset + CHUNK_SIZE);
         reader.readAsArrayBuffer(slice);
       }
