@@ -217,8 +217,9 @@ export function MobileView() {
       const errMsg = err?.response?.data?.error || err?.message || 'Unknown error';
       const errStatus = err?.response?.status;
       console.error('[Upload Error]:', errStatus, errMsg, err);
-      // 3. Offline Staging: Store in IndexedDB if offline or disconnected
-      if (!navigator.onLine || errMsg.includes('Network') || errMsg.includes('timeout')) {
+
+      // 3. Offline Staging: ONLY queue when device is truly offline
+      if (!navigator.onLine) {
         try {
           for (let i = 0; i < selectedFiles.length; i++) {
             const f = selectedFiles[i];
