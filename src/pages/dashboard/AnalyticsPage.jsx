@@ -387,8 +387,6 @@ export function AnalyticsPage({ files, texts }) {
 
         .top-cust-count { font-size: 0.72rem; font-weight: 700; color: #64748B; flex-shrink: 0; }
 
-        .insights-list { display: flex; flex-direction: column; gap: 10px; }
-
         .insight-item {
           font-size: 0.82rem;
           font-weight: 600;
@@ -398,6 +396,68 @@ export function AnalyticsPage({ files, texts }) {
           border-radius: 10px;
           border: 1px solid #F1F5F9;
           line-height: 1.5;
+        }
+
+        /* ── Mobile Responsive Breakpoints ── */
+        @media (max-width: 1024px) {
+          .metrics-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .charts-row {
+            grid-template-columns: 1fr;
+          }
+
+          .analytics-bottom {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .analytics-page {
+            gap: 1rem;
+          }
+
+          .metrics-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+          }
+
+          .metric-card {
+            padding: 0.875rem 1rem;
+            gap: 0.75rem;
+          }
+
+          .metric-value {
+            font-size: 1.35rem;
+          }
+
+          .chart-card {
+            padding: 1rem;
+            border-radius: 14px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .metrics-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+          }
+
+          .metric-card {
+            padding: 0.75rem 0.6rem;
+            gap: 0.5rem;
+          }
+
+          .metric-icon {
+            width: 34px;
+            height: 34px;
+            font-size: 1.1rem;
+          }
+
+          .metric-value {
+            font-size: 1.15rem;
+          }
         }
       `}</style>
     </div>

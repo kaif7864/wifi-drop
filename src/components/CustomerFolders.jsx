@@ -189,14 +189,14 @@ export function CustomerFolders({
         /* ── SINGLE CUSTOMER FOLDER WORKSPACE VIEW ── */
         <div className="customer-workspace">
           <div className="workspace-header flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 workspace-title-area">
               <button
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost btn-sm btn-back-folders"
                 onClick={() => setSelectedCustomerId(null)}
               >
-                ← Back to All Folders
+                ← Back
               </button>
-              <div>
+              <div className="min-w-0">
                 <h3 className="workspace-title flex items-center gap-2">
                   📁 {nicknames[activeGroup.customerId] ? (
                     <>
@@ -216,18 +216,18 @@ export function CustomerFolders({
                     }}
                     title="Add or Edit Shopkeeper Nickname"
                   >
-                    ✏️ Edit Nickname
+                    ✏️ Edit
                   </button>
                 </h3>
                 <span className="workspace-sub">
-                  Customer ID: {activeGroup.customerId} · {activeGroup.files.length} Files, {activeGroup.texts.length} Notes
+                  {activeGroup.files.length} Files · {activeGroup.texts.length} Notes · ID: {activeGroup.customerId}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="workspace-header-actions flex items-center gap-2">
               <button
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary btn-sm btn-folder-qr"
                 onClick={() => setQrModalGroup(activeGroup)}
                 title="Share QR Code for this specific Customer Folder"
               >
@@ -242,14 +242,14 @@ export function CustomerFolders({
                     });
                   }}
                 >
-                  ✓ Mark All Printed
+                  ✓ Mark Printed
                 </button>
               )}
               <button
                 className="btn btn-danger btn-sm"
                 onClick={() => handleDeleteCurrentFolder(activeGroup.customerId)}
               >
-                🗑️ Delete Customer Folder
+                🗑️ Delete
               </button>
             </div>
           </div>
@@ -496,29 +496,37 @@ export function CustomerFolders({
           border: 1px solid var(--border);
           box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03);
           margin-bottom: 1rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
         }
 
         .folder-tabs {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           background: #f1f5f9;
-          padding: 5px;
+          padding: 4px;
           border-radius: 9999px;
           border: 1px solid #e2e8f0;
         }
 
         .tab-chip {
-          padding: 8px 18px;
+          padding: 7px 16px;
           border-radius: 9999px;
           border: none;
           background: transparent;
-          font-size: 0.85rem;
+          font-size: 0.82rem;
           font-weight: 600;
           color: #64748b;
           cursor: pointer;
           transition: all 0.2s ease;
           white-space: nowrap;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .tab-chip:hover {
@@ -626,6 +634,106 @@ export function CustomerFolders({
           display: flex;
           flex-direction: column;
           gap: var(--space-3);
+        }
+
+        /* ── Mobile Responsive Breakpoints (Zero Scrollbars) ── */
+        @media (max-width: 768px) {
+          .customer-folders-main {
+            gap: 0.75rem;
+          }
+
+          .folder-controls-bar {
+            padding: 8px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
+            overflow: visible;
+          }
+
+          .folder-controls-bar > div:last-child {
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+
+          .folder-tabs {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            width: 100%;
+            padding: 3px;
+            gap: 2px;
+            overflow: visible;
+          }
+
+          .tab-chip {
+            padding: 6px 2px;
+            font-size: 10px;
+            font-weight: 700;
+            text-align: center;
+            justify-content: center;
+          }
+
+          .folders-grid {
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 0.75rem;
+          }
+
+          .folder-card {
+            padding: 1rem;
+            border-radius: 14px;
+          }
+
+          .folder-icon {
+            font-size: 1.7rem;
+          }
+
+          .folder-name {
+            font-size: 0.88rem;
+          }
+
+          .workspace-header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+          }
+
+          .workspace-title-area {
+            width: 100%;
+            gap: 8px;
+          }
+
+          .workspace-title {
+            font-size: 0.95rem;
+          }
+
+          .workspace-sub {
+            font-size: 11px;
+          }
+
+          .workspace-header-actions {
+            width: 100%;
+            display: flex;
+            gap: 6px;
+          }
+
+          .workspace-header-actions .btn {
+            flex: 1;
+            padding: 6px 8px;
+            font-size: 11px;
+            justify-content: center;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .folders-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .btn-back-folders {
+            padding: 4px 8px;
+            font-size: 11px;
+          }
         }
       `}</style>
     </div>

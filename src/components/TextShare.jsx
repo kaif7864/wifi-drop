@@ -1,24 +1,26 @@
 /**
  * client/src/components/TextShare.jsx
- * Displays received text messages with copy-to-clipboard and delete
+ * Multi-Mode Text Share Component — Supports both Full List View (with live notes) & Single Card View
  */
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function formatTime(isoString) {
+  if (!isoString) return '';
   return new Date(isoString).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
   });
 }
 
-export function TextShare({ textRecord, onDelete }) {
+function SingleTextCard({ textRecord, onDelete }) {
   const [copied, setCopied] = useState(false);
+  if (!textRecord) return null;
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(textRecord.text);
+      await navigator.clipboard.writeText(textRecord.text || '');
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -29,26 +31,26 @@ export function TextShare({ textRecord, onDelete }) {
   return (
     <motion.div
       className="text-card glass-card"
-      initial={{ opacity: 0, x: 30 }}
+      initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       layout
     >
       <div className="text-content">
-        <p className="text-body">{textRecord.text}</p>
+        <p className="text-body">{textRecord.text || ''}</p>
         <div className="text-meta">
-          <span className="device-tag">{textRecord.deviceName}</span>
+          <span className="device-tag">{textRecord.deviceName || 'Mobile'}</span>
           {textRecord.customerName && (
             <>
               <span className="meta-dot">·</span>
-              <span className="customer-tag" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>
+              <span className="customer-tag" style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>
                 👤 {textRecord.customerName}
               </span>
             </>
           )}
           <span className="meta-dot">·</span>
-          <span>{formatTime(textRecord.receivedAt)}</span>
+          <span>{formatTime(textRecord.receivedAt || textRecord.createdAt)}</span>
         </div>
       </div>
       <div className="text-actions">
@@ -58,14 +60,16 @@ export function TextShare({ textRecord, onDelete }) {
         >
           {copied ? '✅ Copied!' : '📋 Copy'}
         </button>
-        <button
-          className="btn-icon"
-          title="Delete"
-          onClick={() => onDelete(textRecord.uuid || textRecord.id || textRecord._id)}
-          style={{ color: 'var(--danger)' }}
-        >
-          🗑️
-        </button>
+        {onDelete && (
+          <button
+            className="btn-icon btn-danger-icon"
+            title="Delete"
+            onClick={() => onDelete(textRecord.uuid || textRecord.id || textRecord._id)}
+            style={{ color: 'var(--danger)' }}
+          >
+            🗑️
+          </button>
+        )}
       </div>
 
       <style>{`
@@ -75,6 +79,10 @@ export function TextShare({ textRecord, onDelete }) {
           align-items: flex-start;
           justify-content: space-between;
           gap: var(--space-4);
+          background: #ffffff;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-sm);
         }
         .text-content {
           flex: 1;
@@ -90,12 +98,13 @@ export function TextShare({ textRecord, onDelete }) {
         .text-meta {
           display: flex;
           align-items: center;
-          gap: var(--space-1);
+          gap: var(--space-2);
           font-size: var(--font-size-xs);
           color: var(--text-muted);
           margin-top: var(--space-2);
+          flex-wrap: wrap;
         }
-        .device-tag { color: var(--accent-secondary); }
+        .device-tag { color: var(--accent-primary); font-weight: 600; }
         .meta-dot { opacity: 0.4; }
         .text-actions {
           display: flex;
@@ -103,7 +112,56 @@ export function TextShare({ textRecord, onDelete }) {
           gap: var(--space-2);
           flex-shrink: 0;
         }
+
+        @media (max-width: 640px) {
+          .text-card {
+            flex-direction: column;
+            align-items: stretch;
+            gap: var(--space-3);
+            padding: 1rem;
+          }
+
+          .text-actions {
+            justify-content: flex-end;
+            padding-top: var(--space-2);
+            border-top: 1px solid var(--border);
+          }
+        }
       `}</style>
     </motion.div>
   );
+}
+
+export function TextShare({ textRecord, texts, onDelete }) {
+  // Mode 1: List View (when texts array is provided)
+  if (Array.isArray(texts)) {
+    if (texts.length === 0) {
+      return (
+        <div className="empty-state">
+          <span className="empty-state-icon">💬</span>
+          <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No text notes received</p>
+          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+            Send text notes, phone numbers, or links from the mobile transfer page
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-list flex flex-col gap-3">
+        <AnimatePresence mode="popLayout">
+          {texts.map((t) => (
+            <SingleTextCard
+              key={t.uuid || t.id || t._id}
+              textRecord={t}
+              onDelete={onDelete}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // Mode 2: Single Card View (when textRecord is provided)
+  return <SingleTextCard textRecord={textRecord} onDelete={onDelete} />;
 }

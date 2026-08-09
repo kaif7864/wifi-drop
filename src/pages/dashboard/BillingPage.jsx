@@ -1,10 +1,9 @@
 /**
  * client/src/pages/dashboard/BillingPage.jsx
- * Page: Billing & Invoicing — Auto-imports shared print files into customer bills
- * Calculates total dynamically: Pages (Qty) × Price Per Page (Rate) + GST
+ * Multi-Tenant Billing & Invoicing POS System — Fully Mobile Responsive with Touch POS Cards & Invoices
  */
 
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { config } from '../../config';
@@ -29,7 +28,7 @@ function generateInvoiceNo() {
   return `INV-${Date.now().toString().slice(-6)}`;
 }
 
-export function BillingPage({ files, texts, shop }) {
+export function BillingPage({ files = [], texts = [], shop, sessionId }) {
   const [activeTab, setActiveTab] = useState('quick_bill');
   const [customer, setCustomer] = useState('');
   const [payMode, setPayMode] = useState('cash');
@@ -52,15 +51,15 @@ export function BillingPage({ files, texts, shop }) {
     return () => window.removeEventListener('wifidrop_bill_items_updated', refreshPendingQueue);
   }, [refreshPendingQueue]);
 
-  // Fetch real invoices from backend on mount
+  // Load past invoices on mount
   useEffect(() => {
     fetchInvoices();
   }, [shopId]);
 
   async function fetchInvoices() {
-    setLoading(true);
     try {
-      const res = await axios.get(`${config.serverUrl}/api/invoices?shopId=${shopId}`);
+      setLoading(true);
+      const res = await axios.get(`${config.serverUrl}/api/billing/invoices?shopId=${shopId}`);
       if (res.data.success) {
         setInvoices(res.data.invoices || []);
       }
@@ -74,16 +73,16 @@ export function BillingPage({ files, texts, shop }) {
   // Unique customers list from files, texts, and pending bill queue
   const uniqueCustomers = useMemo(() => {
     const names = new Set();
-    pendingBillQueue.forEach((item) => names.add(item.customerName));
-    files.forEach((f) => { if (f.customerName || f.deviceName) names.add(f.customerName || f.deviceName); });
-    texts.forEach((t) => { if (t.customerName || t.deviceName) names.add(t.customerName || t.deviceName); });
+    (pendingBillQueue || []).forEach((item) => { if (item?.customerName) names.add(item.customerName); });
+    (files || []).forEach((f) => { if (f?.customerName || f?.deviceName) names.add(f.customerName || f.deviceName); });
+    (texts || []).forEach((t) => { if (t?.customerName || t?.deviceName) names.add(t.customerName || t.deviceName); });
     return Array.from(names);
   }, [pendingBillQueue, files, texts]);
 
   // Customers who have pending files in bill queue
   const pendingCustomers = useMemo(() => {
     const map = {};
-    pendingBillQueue.forEach((item) => {
+    (pendingBillQueue || []).forEach((item) => {
       const name = item.customerName || 'Anonymous';
       if (!map[name]) map[name] = [];
       map[name].push(item);
@@ -96,7 +95,7 @@ export function BillingPage({ files, texts, shop }) {
     const targetName = targetCustomerName.trim().toLowerCase();
     if (!targetName) return;
 
-    const matchedPending = pendingBillQueue.filter(
+    const matchedPending = (pendingBillQueue || []).filter(
       (i) => (i.customerName || '').toLowerCase().trim() === targetName
     );
 
@@ -109,14 +108,19 @@ export function BillingPage({ files, texts, shop }) {
         rate: p.rate || 2, // Per page rate
         isSharedFile: true,
       }));
-      setItems(convertedItems);
+
+      setItems((prev) => {
+        const existingIds = new Set(prev.map((i) => i.id || i.fileId));
+        const newOnes = convertedItems.filter((c) => !existingIds.has(c.id) && !existingIds.has(c.fileId));
+        return [...prev, ...newOnes];
+      });
     }
   }, [pendingBillQueue]);
 
-  function handleSelectCustomer(name) {
-    setCustomer(name);
-    loadCustomerPendingItems(name);
-  }
+  const handleSelectCustomer = (custName) => {
+    setCustomer(custName);
+    loadCustomerPendingItems(custName);
+  };
 
   const subtotal = items.reduce((acc, i) => acc + (Number(i.qty) || 0) * (Number(i.rate) || 0), 0);
   const gst = includeGst ? Math.round(subtotal * 0.18 * 100) / 100 : 0;
@@ -145,11 +149,20 @@ export function BillingPage({ files, texts, shop }) {
         [field]: field === 'qty' || field === 'rate' ? Number(value) : value,
       };
 
-      // Auto set default rate if service type is selected from standard list
       if (field === 'service') {
         const stdSvc = SERVICES.find((s) => s.name === value);
         if (stdSvc) next[idx].rate = stdSvc.rate;
       }
+      return next;
+    });
+  }
+
+  function stepQty(idx, delta) {
+    setItems((prev) => {
+      const next = [...prev];
+      const currentQty = Number(next[idx].qty) || 1;
+      const newQty = Math.max(1, currentQty + delta);
+      next[idx] = { ...next[idx], qty: newQty };
       return next;
     });
   }
@@ -181,7 +194,7 @@ export function BillingPage({ files, texts, shop }) {
     };
 
     try {
-      const res = await axios.post(`${config.serverUrl}/api/invoices`, inv);
+      const res = await axios.post(`${config.serverUrl}/api/billing/invoices`, inv);
       if (res.data.success) {
         setInvoices((prev) => [res.data.invoice, ...prev]);
 
@@ -201,7 +214,7 @@ export function BillingPage({ files, texts, shop }) {
   async function deleteInvoice(idOrNo) {
     if (!confirm('Are you sure you want to delete this invoice?')) return;
     try {
-      await axios.delete(`${config.serverUrl}/api/invoices/${idOrNo}`);
+      await axios.delete(`${config.serverUrl}/api/billing/invoices/${idOrNo}`);
       setInvoices((prev) => prev.filter((i) => i._id !== idOrNo && i.no !== idOrNo));
     } catch {
       alert('Failed to delete invoice');
@@ -244,10 +257,10 @@ export function BillingPage({ files, texts, shop }) {
       {/* Revenue Stats */}
       <div className="billing-stats">
         {[
-          { label: 'Today Revenue', value: `₹${todayRevenue.toLocaleString('en-IN')}`, color: '#4F46E5', bg: '#EEF2FF' },
-          { label: 'Total Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, color: '#059669', bg: '#ECFDF5' },
-          { label: 'Total Invoices', value: invoices.length, color: '#D97706', bg: '#FFFBEB' },
-          { label: 'Pending Bills', value: invoices.filter((i) => i.status === 'pending').length, color: '#EF4444', bg: '#FEF2F2' },
+          { label: 'Today Revenue', value: `₹${todayRevenue.toLocaleString('en-IN')}`, color: '#4F46E5' },
+          { label: 'Total Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, color: '#059669' },
+          { label: 'Total Invoices', value: invoices.length, color: '#D97706' },
+          { label: 'Pending Files', value: pendingBillQueue.length, color: '#EF4444' },
         ].map((s) => (
           <div key={s.label} className="billing-stat">
             <div className="billing-stat-val" style={{ color: s.color }}>{s.value}</div>
@@ -257,24 +270,24 @@ export function BillingPage({ files, texts, shop }) {
       </div>
 
       {/* Tab Bar & Export Button */}
-      <div className="flex items-center justify-between" style={{ width: '100%' }}>
+      <div className="billing-nav-row flex items-center justify-between">
         <div className="billing-tabs">
           <button className={`tab-pill ${activeTab === 'quick_bill' ? 'active' : ''}`} onClick={() => setActiveTab('quick_bill')}>
-            💰 Quick Bill & File Charges
+            💰 Quick Bill (POS)
           </button>
           <button className={`tab-pill ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => setActiveTab('invoices')}>
             📋 Invoices ({invoices.length})
           </button>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={exportCSV}>
-          📥 Export Sales CSV
+        <button className="btn btn-secondary btn-sm export-btn" onClick={exportCSV}>
+          📥 Export CSV
         </button>
       </div>
 
       {/* Pending Customer File Queue Bar */}
       {pendingCustomers.length > 0 && activeTab === 'quick_bill' && (
         <div className="pending-queue-bar">
-          <span className="pending-queue-title">💳 Files Added to Bill:</span>
+          <span className="pending-queue-title">⚡ Added Files Queue:</span>
           <div className="pending-queue-chips">
             {pendingCustomers.map((pc) => (
               <button
@@ -295,49 +308,42 @@ export function BillingPage({ files, texts, shop }) {
             <div className="bill-form-card">
               {/* Customer & Payment Mode Selector */}
               <div className="bill-row">
-                <div style={{ flex: 1 }}>
+                <div className="form-group flex-1">
                   <label className="form-label">Customer Name / Token</label>
                   <input
                     type="text"
-                    className="input"
-                    list="cust-list"
-                    placeholder="Select customer or type e.g. Ramesh Kumar"
+                    className="input input-sm"
+                    placeholder="e.g. Ramesh Kumar or Token #5"
                     value={customer}
-                    onChange={(e) => {
-                      setCustomer(e.target.value);
-                      loadCustomerPendingItems(e.target.value);
-                    }}
+                    onChange={(e) => setCustomer(e.target.value)}
+                    list="billing-customer-datalist"
                   />
-                  <datalist id="cust-list">
+                  <datalist id="billing-customer-datalist">
                     {uniqueCustomers.map((c) => (
                       <option key={c} value={c} />
                     ))}
                   </datalist>
                 </div>
-                <div style={{ width: '160px' }}>
+
+                <div className="form-group">
                   <label className="form-label">Payment Mode</label>
-                  <select className="input" value={payMode} onChange={(e) => setPayMode(e.target.value)}>
+                  <select className="input input-sm" value={payMode} onChange={(e) => setPayMode(e.target.value)}>
                     <option value="cash">💵 Cash</option>
                     <option value="upi">📱 UPI / QR</option>
                     <option value="card">💳 Card</option>
-                    <option value="credit">📝 Credit</option>
+                    <option value="due">⏳ Due / Credit</option>
                   </select>
                 </div>
               </div>
 
-              {/* Service Items Table */}
+              {/* Bill Items Section */}
               <div className="bill-items-section">
-                <div className="bill-items-header">
-                  <div>
-                    <h4 style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0F172A' }}>
-                      📋 File Items & Per Page Pricing
-                    </h4>
-                    <p style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                      Set total pages and per page price (₹) for each document
-                    </p>
-                  </div>
-                  <button className="btn btn-secondary btn-xs" onClick={addItem}>
-                    + Add Custom Charge
+                <div className="bill-items-header flex items-center justify-between">
+                  <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0F172A' }}>
+                    📦 Bill Items ({items.length})
+                  </h4>
+                  <button className="btn btn-primary btn-xs" onClick={addItem}>
+                    + Add Item
                   </button>
                 </div>
 
@@ -348,72 +354,122 @@ export function BillingPage({ files, texts, shop }) {
                       No items in this bill yet.
                     </p>
                     <p style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                      Click <strong>"💳 Add to Bill"</strong> on any file card or pick a customer above, or click <strong>"+ Add Custom Charge"</strong>.
+                      Click <strong>"Add to Bill"</strong> on file cards or click <strong>"+ Add Item"</strong> above.
                     </p>
                   </div>
                 ) : (
-                  <table className="bill-table">
-                    <thead>
-                      <tr>
-                        <th>File / Service Name</th>
-                        <th style={{ width: '100px' }}>Pages (Qty)</th>
-                        <th style={{ width: '130px' }}>Price / Page (₹)</th>
-                        <th style={{ width: '120px' }}>Total (₹)</th>
-                        <th style={{ width: '40px' }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <>
+                    {/* ── DESKTOP TABLE VIEW ── */}
+                    <div className="bill-table-desktop-wrap">
+                      <table className="bill-table">
+                        <thead>
+                          <tr>
+                            <th>File / Service Name</th>
+                            <th style={{ width: '100px' }}>Pages (Qty)</th>
+                            <th style={{ width: '130px' }}>Price / Page (₹)</th>
+                            <th style={{ width: '120px' }}>Total (₹)</th>
+                            <th style={{ width: '40px' }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((item, i) => (
+                            <tr key={item.id || i}>
+                              <td>
+                                <input
+                                  type="text"
+                                  className="input input-sm"
+                                  placeholder="Service or File name"
+                                  value={item.service}
+                                  title={item.service}
+                                  onChange={(e) => updateItem(i, 'service', e.target.value)}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  className="input input-sm"
+                                  min={1}
+                                  value={item.qty}
+                                  onChange={(e) => updateItem(i, 'qty', e.target.value)}
+                                />
+                              </td>
+                              <td>
+                                <div className="flex items-center gap-1">
+                                  <span style={{ fontSize: '0.8rem', color: '#64748B' }}>₹</span>
+                                  <input
+                                    type="number"
+                                    className="input input-sm"
+                                    min={0}
+                                    step="0.5"
+                                    value={item.rate}
+                                    onChange={(e) => updateItem(i, 'rate', e.target.value)}
+                                  />
+                                </div>
+                              </td>
+                              <td>
+                                <span style={{ fontWeight: 900, color: '#059669', fontSize: '0.92rem' }}>
+                                  ₹{((Number(item.qty) || 0) * (Number(item.rate) || 0)).toFixed(2)}
+                                </span>
+                              </td>
+                              <td>
+                                <button className="btn-icon btn-danger-icon" onClick={() => removeItem(i)} title="Remove Item">
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* ── MOBILE TOUCH POS CARDS VIEW ── */}
+                    <div className="bill-items-mobile-list">
                       {items.map((item, i) => (
-                        <tr key={item.id || i}>
-                          <td style={{ minWidth: 0, overflow: 'hidden' }}>
+                        <div key={item.id || i} className="mobile-pos-item-card">
+                          <div className="mobile-pos-card-top flex items-center justify-between">
                             <input
                               type="text"
-                              className="input input-sm"
-                              style={{ minWidth: 0, width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                              className="input input-sm mobile-item-name-input"
                               placeholder="Service or File name"
                               value={item.service}
-                              title={item.service}
                               onChange={(e) => updateItem(i, 'service', e.target.value)}
                             />
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                className="input input-sm"
-                                min={1}
-                                value={item.qty}
-                                onChange={(e) => updateItem(i, 'qty', e.target.value)}
-                              />
+                            <button className="btn-icon btn-danger-icon mobile-item-del-btn" onClick={() => removeItem(i)}>
+                              ✕
+                            </button>
+                          </div>
+
+                          <div className="mobile-pos-card-bottom flex items-center justify-between">
+                            {/* Stepper Controls for Qty */}
+                            <div className="mobile-qty-stepper flex items-center gap-1">
+                              <span className="stepper-label">Qty:</span>
+                              <button className="btn-stepper" onClick={() => stepQty(i, -1)}>−</button>
+                              <span className="stepper-val">{item.qty || 1}</span>
+                              <button className="btn-stepper" onClick={() => stepQty(i, 1)}>+</button>
                             </div>
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-1">
-                              <span style={{ fontSize: '0.8rem', color: '#64748B' }}>₹</span>
+
+                            {/* Rate Input */}
+                            <div className="mobile-rate-box flex items-center gap-1">
+                              <span className="rate-currency">₹</span>
                               <input
                                 type="number"
-                                className="input input-sm"
+                                className="input input-sm mobile-rate-input"
                                 min={0}
                                 step="0.5"
                                 value={item.rate}
                                 onChange={(e) => updateItem(i, 'rate', e.target.value)}
                               />
                             </div>
-                          </td>
-                          <td>
-                            <span style={{ fontWeight: 900, color: '#059669', fontSize: '0.92rem' }}>
+
+                            {/* Line Item Total */}
+                            <div className="mobile-item-total">
                               ₹{((Number(item.qty) || 0) * (Number(item.rate) || 0)).toFixed(2)}
-                            </span>
-                          </td>
-                          <td>
-                            <button className="btn-icon btn-danger-icon" onClick={() => removeItem(i)} title="Remove Item">
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -426,7 +482,7 @@ export function BillingPage({ files, texts, shop }) {
                     checked={includeGst}
                     onChange={(e) => setIncludeGst(e.target.checked)}
                   />
-                  <label htmlFor="gst-check" style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
+                  <label htmlFor="gst-check" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
                     Include GST (18%)
                   </label>
                 </div>
@@ -444,7 +500,7 @@ export function BillingPage({ files, texts, shop }) {
                   )}
                   <div className="bill-total-row grand">
                     <span>💰 Grand Total</span>
-                    <span style={{ color: '#4F46E5', fontSize: '1.2rem', fontWeight: 900 }}>
+                    <span style={{ color: '#4F46E5', fontSize: '1.25rem', fontWeight: 900 }}>
                       ₹{total.toFixed(2)}
                     </span>
                   </div>
@@ -452,12 +508,12 @@ export function BillingPage({ files, texts, shop }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 mt-4">
-                <button className="btn btn-primary" onClick={saveBill} disabled={items.length === 0}>
+              <div className="bill-actions-row flex items-center gap-2 mt-4">
+                <button className="btn btn-primary btn-save-bill" onClick={saveBill} disabled={items.length === 0}>
                   💾 Save & Complete Bill
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => window.print()} disabled={items.length === 0}>
-                  🖨️ Print Bill Receipt
+                  🖨️ Print Receipt
                 </button>
               </div>
             </div>
@@ -466,54 +522,87 @@ export function BillingPage({ files, texts, shop }) {
 
         {activeTab === 'invoices' && (
           <motion.div key="invoices" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="invoice-table-wrapper">
-              {invoices.length === 0 ? (
-                <div className="empty-state">
-                  <span className="empty-state-icon">📋</span>
-                  <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>No invoices found</p>
-                  <p style={{ fontSize: '0.8rem', color: '#94A3B8' }}>Create your first bill in the Quick Bill tab.</p>
-                </div>
-              ) : (
-                <table className="print-table">
-                  <thead>
-                    <tr>
-                      <th>Invoice #</th>
-                      <th>Customer</th>
-                      <th>Amount</th>
-                      <th>Mode</th>
-                      <th>Date</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoices.map((inv, i) => (
-                      <tr key={inv._id || inv.no || i}>
-                        <td><code style={{ fontSize: '0.8rem', color: '#4F46E5' }}>{inv.no}</code></td>
-                        <td><span style={{ fontWeight: 700 }}>{inv.customerName || inv.customer}</span></td>
-                        <td><span style={{ fontWeight: 800, color: '#059669' }}>₹{(inv.amount || 0).toFixed(2)}</span></td>
-                        <td><span className="mode-badge">{(inv.mode || 'cash').toUpperCase()}</span></td>
-                        <td><span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>{new Date(inv.createdAt || inv.date || Date.now()).toLocaleDateString('en-IN')}</span></td>
-                        <td>
-                          <span className={`status-pill ${inv.status === 'paid' ? 'printed' : 'pending'}`}>
-                            {inv.status === 'paid' ? '✅ Paid' : '⏳ Pending'}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            className="btn btn-ghost btn-xs"
-                            style={{ color: '#EF4444' }}
-                            onClick={() => deleteInvoice(inv._id || inv.no)}
-                          >
-                            🗑️ Delete
-                          </button>
-                        </td>
+            {invoices.length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-state-icon">📋</span>
+                <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>No invoices found</p>
+                <p style={{ fontSize: '0.8rem', color: '#94A3B8' }}>Create your first bill in the Quick Bill tab.</p>
+              </div>
+            ) : (
+              <>
+                {/* ── DESKTOP INVOICE TABLE ── */}
+                <div className="invoice-table-wrapper desktop-invoices-only">
+                  <table className="print-table">
+                    <thead>
+                      <tr>
+                        <th>Invoice #</th>
+                        <th>Customer</th>
+                        <th>Amount</th>
+                        <th>Mode</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                    </thead>
+                    <tbody>
+                      {invoices.map((inv, i) => (
+                        <tr key={inv._id || inv.no || i}>
+                          <td><code style={{ fontSize: '0.8rem', color: '#4F46E5' }}>{inv.no}</code></td>
+                          <td><span style={{ fontWeight: 700 }}>{inv.customerName || inv.customer}</span></td>
+                          <td><span style={{ fontWeight: 800, color: '#059669' }}>₹{(inv.amount || 0).toFixed(2)}</span></td>
+                          <td><span className="mode-badge">{(inv.mode || 'cash').toUpperCase()}</span></td>
+                          <td><span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>{new Date(inv.createdAt || inv.date || Date.now()).toLocaleDateString('en-IN')}</span></td>
+                          <td>
+                            <span className={`status-pill ${inv.status === 'paid' ? 'printed' : 'pending'}`}>
+                              {inv.status === 'paid' ? '✅ Paid' : '⏳ Pending'}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-ghost btn-xs"
+                              style={{ color: '#EF4444' }}
+                              onClick={() => deleteInvoice(inv._id || inv.no)}
+                            >
+                              🗑️ Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE INVOICES CARDS ── */}
+                <div className="mobile-invoices-list">
+                  {invoices.map((inv, i) => (
+                    <div key={inv._id || inv.no || i} className="mobile-invoice-card">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <code className="mobile-inv-no">{inv.no}</code>
+                          <h4 className="mobile-inv-cust">{inv.customerName || inv.customer || 'Customer'}</h4>
+                        </div>
+                        <div className="text-right">
+                          <div className="mobile-inv-amount">₹{(inv.amount || 0).toFixed(2)}</div>
+                          <span className="mode-badge">{(inv.mode || 'cash').toUpperCase()}</span>
+                        </div>
+                      </div>
+                      <div className="mobile-inv-footer flex items-center justify-between">
+                        <span className="mobile-inv-date">
+                          {new Date(inv.createdAt || inv.date || Date.now()).toLocaleDateString('en-IN')}
+                        </span>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          style={{ color: '#EF4444' }}
+                          onClick={() => deleteInvoice(inv._id || inv.no)}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -521,29 +610,38 @@ export function BillingPage({ files, texts, shop }) {
       <style>{`
         .billing-page { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; }
         .billing-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-        .billing-stat { background: white; border: 1px solid #E2E8F0; border-radius: 14px; padding: 1.1rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-        .billing-stat-val { font-size: 1.6rem; font-weight: 900; line-height: 1; }
-        .billing-stat-lbl { font-size: 0.78rem; color: #64748B; font-weight: 600; margin-top: 4px; }
-        .billing-tabs { display: flex; gap: 6px; background: #F1F5F9; padding: 4px; border-radius: 9999px; width: fit-content; }
-        .tab-pill { padding: 8px 18px; border-radius: 9999px; border: none; background: transparent; font-size: 0.84rem; font-weight: 600; color: #64748B; cursor: pointer; transition: all 0.18s ease; font-family: var(--font-family); white-space: nowrap; }
+        .billing-stat { background: white; border: 1px solid #E2E8F0; border-radius: 14px; padding: 1rem 1.15rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .billing-stat-val { font-size: 1.5rem; font-weight: 900; line-height: 1; }
+        .billing-stat-lbl { font-size: 0.76rem; color: #64748B; font-weight: 600; margin-top: 4px; }
+        .billing-nav-row { width: 100%; gap: 10px; }
+        .billing-tabs { display: flex; gap: 4px; background: #F1F5F9; padding: 4px; border-radius: 9999px; }
+        .tab-pill { padding: 8px 18px; border-radius: 9999px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #64748B; cursor: pointer; transition: all 0.18s ease; font-family: var(--font-family); white-space: nowrap; }
         .tab-pill.active { background: white; color: #4F46E5; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .pending-queue-bar { display: flex; align-items: center; gap: 12px; background: #EEF2FF; border: 1px solid #C7D2FE; padding: 10px 16px; border-radius: 14px; }
-        .pending-queue-title { font-size: 0.8rem; font-weight: 800; color: #4F46E5; white-space: nowrap; }
-        .pending-queue-chips { display: flex; gap: 8px; flex-wrap: wrap; }
-        .pending-chip { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; border: 1px solid #C7D2FE; background: white; color: #374151; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease; font-family: var(--font-family); }
+        .pending-queue-bar { display: flex; align-items: center; gap: 10px; background: #EEF2FF; border: 1px solid #C7D2FE; padding: 8px 14px; border-radius: 12px; }
+        .pending-queue-title { font-size: 0.78rem; font-weight: 800; color: #4F46E5; white-space: nowrap; }
+        .pending-queue-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .pending-chip { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; border: 1px solid #C7D2FE; background: white; color: #374151; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease; font-family: var(--font-family); }
         .pending-chip:hover, .pending-chip.active { background: #4F46E5; color: white; border-color: #4F46E5; }
-        .chip-badge { font-size: 0.68rem; background: #F1F5F9; color: #4F46E5; padding: 1px 6px; border-radius: 999px; }
+        .chip-badge { font-size: 0.65rem; background: #F1F5F9; color: #4F46E5; padding: 1px 5px; border-radius: 999px; }
         .pending-chip.active .chip-badge { background: rgba(255,255,255,0.25); color: white; }
         .bill-form-card { background: white; border: 1px solid #E2E8F0; border-radius: 18px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
         .bill-row { display: flex; gap: 1rem; margin-bottom: 1.25rem; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-label { font-size: 0.78rem; font-weight: 700; color: #374151; }
         .bill-items-section { margin-bottom: 1.25rem; }
-        .bill-items-header { display: flex; items-center; justify-content: space-between; margin-bottom: 0.75rem; }
-        .empty-bill-box { background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 14px; padding: 2rem; text-align: center; }
+        .bill-items-header { margin-bottom: 0.75rem; }
+        .empty-bill-box { background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 14px; padding: 1.75rem; text-align: center; }
+        
+        /* Desktop Bill Table */
+        .bill-table-desktop-wrap { width: 100%; }
         .bill-table { width: 100%; border-collapse: collapse; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; table-layout: fixed; }
-        .bill-table th { background: #F8FAFC; padding: 10px 14px; text-align: left; font-size: 0.78rem; font-weight: 800; color: #64748B; text-transform: uppercase; border-bottom: 1px solid #E2E8F0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bill-table td { padding: 10px 14px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-        .bill-table td input { width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+        .bill-table th { background: #F8FAFC; padding: 10px 14px; text-align: left; font-size: 0.78rem; font-weight: 800; color: #64748B; text-transform: uppercase; border-bottom: 1px solid #E2E8F0; }
+        .bill-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
         .bill-table tr:last-child td { border-bottom: none; }
+        
+        /* Mobile POS Cards (hidden on desktop) */
+        .bill-items-mobile-list { display: none; }
+
         .bill-totals-area { display: flex; align-items: flex-end; justify-content: space-between; border-top: 1px solid #F1F5F9; padding-top: 1.25rem; margin-top: 0.5rem; }
         .bill-totals { display: flex; flex-direction: column; gap: 6px; width: 280px; }
         .bill-total-row { display: flex; justify-content: space-between; font-size: 0.88rem; color: #64748B; font-weight: 600; }
@@ -551,14 +649,220 @@ export function BillingPage({ files, texts, shop }) {
         .invoice-table-wrapper { background: white; border: 1px solid #E2E8F0; border-radius: 18px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
         .print-table { width: 100%; border-collapse: collapse; }
         .print-table th { background: #F8FAFC; padding: 12px 16px; text-align: left; font-size: 0.78rem; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #E2E8F0; }
-        .print-table td { padding: 14px 16px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
+        .print-table td { padding: 12px 16px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
         .print-table tr:last-child td { border-bottom: none; }
-        .print-table tr:hover td { background: #F8FAFC; }
-        .mode-badge { font-size: 0.7rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: #F1F5F9; color: #374151; }
+        .mode-badge { font-size: 0.68rem; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: #F1F5F9; color: #374151; display: inline-block; }
         .status-pill { font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
         .status-pill.printed { background: #ECFDF5; color: #059669; }
         .status-pill.pending { background: #FFFBEB; color: #D97706; }
+        .mobile-invoices-list { display: none; }
         .mt-4 { margin-top: 1rem; }
+
+        /* ── Mobile Responsive Breakpoints (Zero Scrollbars + Touch POS Cards) ── */
+        @media (max-width: 768px) {
+          .billing-page { gap: 0.875rem; }
+          .billing-stats { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+          .billing-stat { padding: 0.75rem 0.875rem; border-radius: 12px; }
+          .billing-stat-val { font-size: 1.25rem; }
+
+          .billing-nav-row {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 6px;
+          }
+
+          .billing-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            width: 100%;
+            padding: 3px;
+            gap: 2px;
+          }
+
+          .tab-pill {
+            padding: 7px 4px;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: center;
+            justify-content: center;
+          }
+
+          .export-btn {
+            width: 100%;
+          }
+
+          .pending-queue-bar {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+            padding: 8px 10px;
+          }
+
+          .bill-form-card {
+            padding: 1rem 0.875rem;
+            border-radius: 14px;
+          }
+
+          .bill-row {
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+          }
+
+          /* Hide desktop table on mobile, show clean touch cards */
+          .bill-table-desktop-wrap { display: none; }
+          .bill-items-mobile-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+          }
+
+          .mobile-pos-item-card {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+          }
+
+          .mobile-item-name-input {
+            font-weight: 700;
+            background: white !important;
+          }
+
+          .mobile-item-del-btn {
+            width: 30px;
+            height: 30px;
+            flex-shrink: 0;
+            font-size: 12px;
+          }
+
+          .mobile-qty-stepper {
+            background: white;
+            border: 1px solid #CBD5E1;
+            border-radius: 8px;
+            padding: 2px 4px;
+          }
+
+          .stepper-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748B;
+            margin-right: 2px;
+          }
+
+          .btn-stepper {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            border: none;
+            background: #EEF2FF;
+            color: #4F46E5;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .stepper-val {
+            font-size: 12px;
+            font-weight: 800;
+            color: #0F172A;
+            min-width: 18px;
+            text-align: center;
+          }
+
+          .mobile-rate-input {
+            width: 55px !important;
+            padding: 4px 6px !important;
+            text-align: center;
+            font-weight: 700;
+          }
+
+          .rate-currency {
+            font-size: 11px;
+            font-weight: 800;
+            color: #64748B;
+          }
+
+          .mobile-item-total {
+            font-size: 1rem;
+            font-weight: 900;
+            color: #059669;
+          }
+
+          .bill-totals-area {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.75rem;
+          }
+
+          .bill-totals {
+            width: 100%;
+          }
+
+          .bill-actions-row {
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .btn-save-bill, .bill-actions-row .btn {
+            width: 100%;
+          }
+
+          /* Invoices Mobile Cards */
+          .desktop-invoices-only { display: none; }
+          .mobile-invoices-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+          }
+
+          .mobile-invoice-card {
+            background: white;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 10px 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .mobile-inv-no {
+            font-size: 11px;
+            font-weight: 700;
+            color: #4F46E5;
+          }
+
+          .mobile-inv-cust {
+            font-size: 0.88rem;
+            font-weight: 800;
+            color: #0F172A;
+            margin-top: 1px;
+          }
+
+          .mobile-inv-amount {
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: #059669;
+          }
+
+          .mobile-inv-footer {
+            padding-top: 6px;
+            border-top: 1px solid #F1F5F9;
+          }
+
+          .mobile-inv-date {
+            font-size: 11px;
+            color: #94A3B8;
+            font-weight: 600;
+          }
+        }
       `}</style>
     </div>
   );

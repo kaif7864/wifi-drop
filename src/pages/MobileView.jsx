@@ -33,9 +33,23 @@ function getShopAndSessionFromUrl() {
     try { targetCustId = sessionStorage.getItem('wifidrop_target_customer_id') || null; } catch {}
   }
 
+  const rawSession = params.get('session') || null;
+  const rawShop = params.get('shop') || null;
+
+  // Determine legitimate shopId vs guest session:
+  // If ?shop= is provided, use it.
+  // Else if ?session= does NOT start with 'wd_', it is a registered shop's shopId.
+  // If ?session= starts with 'wd_', it is a temporary GUEST session -> shopId is 'default'.
+  let resolvedShopId = 'default';
+  if (rawShop && rawShop !== 'default') {
+    resolvedShopId = rawShop;
+  } else if (rawSession && !rawSession.startsWith('wd_')) {
+    resolvedShopId = rawSession;
+  }
+
   return {
-    sessionId: params.get('session') || null,
-    shopId: params.get('shop') || params.get('session') || 'default',
+    sessionId: rawSession,
+    shopId: resolvedShopId,
     targetCustomerId: targetCustId,
   };
 }
@@ -132,66 +146,38 @@ export function MobileView() {
     };
   }, [sendText]);
 
-  // Hybrid file upload strategy: try P2P WebRTC DataChannel -> HTTP upload -> Offline IndexedDB Queue
+  // Reliable persistent upload directly to server storage and socket delivery
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
     setUploadStatus(null);
 
-    // Strategy 1: Attempt WebRTC P2P Transfer if DataChannel is connected
-    if (peerState === 'connected') {
-      try {
-        setIsP2pUploading(true);
-        setP2pProgress(0);
-        for (const file of selectedFiles) {
-          await sendFileP2P(file, effectiveDeviceName, effectiveCustomerId, customerName.trim() || null, (progress) => {
-            setP2pProgress(progress);
-          });
-        }
-        setUploadStatus('success');
-        setSelectedFiles([]);
-        if (galleryInputRef.current) galleryInputRef.current.value = '';
-        if (docInputRef.current) docInputRef.current.value = '';
-        if (cameraInputRef.current) cameraInputRef.current.value = '';
-        return;
-      } catch (err) {
-        console.warn('[Hybrid Transfer] WebRTC P2P transfer failed, falling back to HTTP Upload:', err);
-      } finally {
-        setIsP2pUploading(false);
-      }
-    }
-
-    // Strategy 2 & 3: HTTP API (Cloud Relay / Local LAN Direct Server)
     try {
-      await uploadFiles(selectedFiles, effectiveDeviceName, sessionId, shopId, effectiveCustomerId, customerName.trim() || null);
+      await uploadFiles(
+        selectedFiles,
+        effectiveDeviceName,
+        sessionId,
+        shopId,
+        effectiveCustomerId,
+        customerName.trim() || null,
+        customerFp?.customerId
+      );
       setUploadStatus('success');
       setSelectedFiles([]);
       if (galleryInputRef.current) galleryInputRef.current.value = '';
       if (docInputRef.current) docInputRef.current.value = '';
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     } catch (err) {
-      // Strategy 4: Disconnection Offline Queue in IndexedDB
-      if (!isOnline) {
-        stageUploadInQueue({
-          type: 'files',
-          fileNames: selectedFiles.map(f => f.name),
-          deviceName: effectiveDeviceName,
-          sessionId,
-          shopId,
-          customerId: effectiveCustomerId,
-          customerName: customerName.trim() || null,
-        });
-        setUploadStatus('queued');
-      } else {
-        setUploadStatus('error');
-      }
+      console.error('[Upload Error]:', err);
+      setUploadStatus('error');
     }
   };
+
 
   const handleTextSend = async () => {
     if (!textInput.trim()) return;
     try {
       setTextStatus(null);
-      await sendText(textInput.trim(), effectiveDeviceName, sessionId, shopId, effectiveCustomerId, customerName.trim() || null);
+      await sendText(textInput.trim(), effectiveDeviceName, sessionId, shopId, effectiveCustomerId, customerName.trim() || null, customerFp?.customerId);
       setTextStatus('success');
       setTextInput('');
     } catch {
@@ -252,12 +238,21 @@ export function MobileView() {
       {/* Sub-header & Optional Name Input */}
       <div className="mobile-sub-header">
         {targetCustomerId && (
-          <div
-            className="target-folder-banner glass-card p-2 mb-2 flex items-center justify-between text-xs"
-            style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: '10px', color: '#4F46E5', fontWeight: 600 }}
-          >
-            <span>🔗 Directing to Folder: <strong>{targetCustomerId}</strong></span>
-            <span className="badge badge-accent">Folder QR</span>
+          <div className="target-folder-banner">
+            <div className="target-folder-top flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="target-folder-icon">📂</span>
+                <div className="min-w-0">
+                  <div className="target-folder-title">Direct Folder Upload</div>
+                  <div className="target-folder-subtitle">Target customer folder is linked</div>
+                </div>
+              </div>
+              <span className="target-folder-badge">Folder QR</span>
+            </div>
+            <div className="target-folder-id-tag">
+              <span className="id-label">Target ID:</span>
+              <code className="id-code">{targetCustomerId}</code>
+            </div>
           </div>
         )}
         <div className="mobile-name-card glass-card">
@@ -321,7 +316,7 @@ export function MobileView() {
                 ref={docInputRef}
                 type="file"
                 multiple
-                accept="application/pdf,.doc,.docx,.xls,.xlsx,.txt,application/zip"
+                accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/zip,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 style={{ display: 'none' }}
                 onChange={handleFileChange}
                 id="doc-picker"
@@ -538,8 +533,93 @@ export function MobileView() {
         }
 
         .mobile-sub-header {
-          padding: var(--space-3) var(--space-4);
+          padding: 10px 16px;
           background: var(--bg-primary);
+        }
+
+        .target-folder-banner {
+          background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+          border: 1px solid #C7D2FE;
+          border-radius: 14px;
+          padding: 10px 12px;
+          margin-bottom: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          box-shadow: 0 2px 8px rgba(79, 70, 229, 0.06);
+        }
+
+        .target-folder-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          width: 100%;
+        }
+
+        .target-folder-icon {
+          font-size: 1.2rem;
+          background: #FFFFFF;
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          flex-shrink: 0;
+        }
+
+        .target-folder-title {
+          font-size: 12px;
+          font-weight: 800;
+          color: #3730A3;
+          line-height: 1.2;
+        }
+
+        .target-folder-subtitle {
+          font-size: 10px;
+          color: #6366F1;
+          font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .target-folder-badge {
+          font-size: 9px;
+          font-weight: 800;
+          padding: 3px 8px;
+          border-radius: 999px;
+          background: #4F46E5;
+          color: #FFFFFF;
+          letter-spacing: 0.02em;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        .target-folder-id-tag {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(255, 255, 255, 0.75);
+          padding: 4px 8px;
+          border-radius: 8px;
+          border: 1px solid rgba(199, 210, 254, 0.7);
+        }
+
+        .id-label {
+          font-size: 10px;
+          font-weight: 700;
+          color: #4B5563;
+        }
+
+        .id-code {
+          font-size: 11px;
+          font-weight: 800;
+          color: #4338CA;
+          font-family: monospace;
+          word-break: break-all;
         }
 
         .mobile-name-card {

@@ -10,6 +10,7 @@ import axios from 'axios';
 import { config } from '../../config';
 
 import { isFileInBill, toggleFileInBill } from '../../utils/billManager';
+import { FilePreviewModal } from '../../components/FilePreviewModal';
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -22,6 +23,7 @@ function formatBytes(bytes) {
 export function PrintPage({ files, onTogglePrint, shop }) {
   const [activeTab, setActiveTab] = useState('queue');
   const [searchQ, setSearchQ] = useState('');
+  const [previewFile, setPreviewFile] = useState(null);
 
   // Printer settings state
   const [defaultPrinter, setDefaultPrinter] = useState('HP LaserJet Pro M404n');
@@ -205,17 +207,13 @@ export function PrintPage({ files, onTogglePrint, shop }) {
                         <td><span className="time-tag">{timeAgo(file.savedAt || file.createdAt)}</span></td>
                         <td>
                           <div className="action-btns">
-                            {file.cloudinarySecureUrl && (
-                              <a
-                                href={file.cloudinarySecureUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="btn btn-ghost btn-xs"
-                                title="Open / Preview"
-                              >
-                                👁️ View
-                              </a>
-                            )}
+                            <button
+                              className="btn btn-ghost btn-xs"
+                              title="Preview file in modal"
+                              onClick={() => setPreviewFile(file)}
+                            >
+                              👁️ View
+                            </button>
                             <button
                               className={`btn btn-xs ${isFileInBill(file.uuid || file.id || file._id) ? 'btn-success' : 'btn-secondary'}`}
                               title="Toggle Customer Bill Queue"
@@ -274,12 +272,21 @@ export function PrintPage({ files, onTogglePrint, shop }) {
                         <td><span className="size-tag">{formatBytes(file.size)}</span></td>
                         <td><span className="badge badge-success" style={{ fontSize: '11px' }}>✓ Printed</span></td>
                         <td>
-                          <button
-                            className="btn btn-ghost btn-xs"
-                            onClick={() => onTogglePrint && onTogglePrint(file)}
-                          >
-                            ↩ Unmark
-                          </button>
+                          <div className="action-btns">
+                            <button
+                              className="btn btn-ghost btn-xs"
+                              title="Preview file in modal"
+                              onClick={() => setPreviewFile(file)}
+                            >
+                              👁️ View
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-xs"
+                              onClick={() => onTogglePrint && onTogglePrint(file)}
+                            >
+                              ↩ Unmark
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -347,6 +354,14 @@ export function PrintPage({ files, onTogglePrint, shop }) {
         )}
       </AnimatePresence>
 
+      {/* In-App File Preview Modal */}
+      {previewFile && (
+        <FilePreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
+
       <style>{`
         .print-page { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; }
         .print-stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
@@ -377,8 +392,90 @@ export function PrintPage({ files, onTogglePrint, shop }) {
         .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
         .setting-row { display: flex; flex-direction: column; gap: 6px; }
         .form-label { font-size: 0.8rem; font-weight: 700; color: #374151; }
-        .printer-status-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #ECFDF5; border-radius: 10px; border: 1px solid #D1FAE5; }
         .mt-4 { margin-top: 1rem; }
+
+        /* ── Mobile Responsive Breakpoints ── */
+        @media (max-width: 1024px) {
+          .print-stats-bar {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 768px) {
+          .print-page {
+            gap: 1rem;
+          }
+
+          .print-stats-bar {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+          }
+
+          .print-stat {
+            padding: 0.875rem 1rem;
+            border-radius: 12px;
+          }
+
+          .print-stat-val {
+            font-size: 1.4rem;
+          }
+
+          .print-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.75rem;
+          }
+
+          .tab-pills {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            width: 100%;
+            padding: 3px;
+            gap: 2px;
+            overflow: visible;
+          }
+
+          .tab-pill {
+            padding: 6px 2px;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-align: center;
+            justify-content: center;
+          }
+
+          .print-toolbar-right {
+            width: 100%;
+            justify-content: space-between;
+          }
+
+          .print-table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .print-table {
+            min-width: 580px;
+          }
+
+          .settings-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .print-stats-bar {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+          }
+
+          .print-stat {
+            padding: 0.75rem;
+          }
+
+          .print-stat-val {
+            font-size: 1.2rem;
+          }
+        }
       `}</style>
     </div>
   );

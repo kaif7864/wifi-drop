@@ -1,7 +1,4 @@
-/**
- * client/src/utils/pdfPageCounter.js
- * Instant client-side PDF page counter for Blobs, ArrayBuffers, and URLs
- */
+import { config } from '../config';
 
 export async function detectPdfPageCount(fileObj) {
   if (!fileObj) return 1;
@@ -22,10 +19,15 @@ export async function detectPdfPageCount(fileObj) {
       arrayBuffer = await fileObj.arrayBuffer();
     } else if (fileObj.blob instanceof Blob) {
       arrayBuffer = await fileObj.blob.arrayBuffer();
-    } else if (fileObj.previewUrl || fileObj.downloadUrl || fileObj.cloudinarySecureUrl) {
-      const targetUrl = fileObj.previewUrl || fileObj.downloadUrl || fileObj.cloudinarySecureUrl;
-      const res = await fetch(targetUrl);
-      arrayBuffer = await res.arrayBuffer();
+    } else if (fileObj.previewUrl || fileObj.downloadUrl || fileObj.cloudinarySecureUrl || fileObj.uuid || fileObj.id) {
+      const rawUrl = fileObj.previewUrl || fileObj.downloadUrl || (fileObj.uuid || fileObj.id ? `/api/files/${fileObj.uuid || fileObj.id}/preview` : '');
+      const targetUrl = (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('blob:'))
+        ? rawUrl
+        : `${config.serverUrl}${rawUrl}`;
+      if (targetUrl) {
+        const res = await fetch(targetUrl);
+        arrayBuffer = await res.arrayBuffer();
+      }
     }
 
     if (arrayBuffer) {

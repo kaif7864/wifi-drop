@@ -1,6 +1,6 @@
 /**
  * client/src/components/QRModal.jsx
- * Interactive Glassmorphic Modal for QR Code & Printable Standee Display
+ * Interactive Glassmorphic Modal for QR Code, Folder-Specific Direct QR & Printable Standee
  */
 
 import { useEffect, useState } from 'react';
@@ -11,11 +11,21 @@ import { config } from '../config';
 import { QRStandee } from './QRStandee';
 import { generateClientQR } from '../utils/qr';
 
-export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customerId }) {
+export function QRModal({
+  isOpen,
+  onClose,
+  sessionId,
+  shopName,
+  shopId,
+  customerId,
+  targetCustomerId,
+}) {
   const [qrData, setQrData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState('qr'); // 'qr' | 'standee'
+
+  const effectiveCustId = customerId || targetCustomerId;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -23,11 +33,13 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
       setLoading(true);
       const queryParts = [];
       if (sessionId) queryParts.push(`session=${encodeURIComponent(sessionId)}`);
-      if (customerId) queryParts.push(`customerId=${encodeURIComponent(customerId)}`);
+      const targetShop = shopId || (sessionId && !sessionId.startsWith('wd_') ? sessionId : null);
+      if (targetShop && targetShop !== 'default') queryParts.push(`shop=${encodeURIComponent(targetShop)}`);
+      if (effectiveCustId) queryParts.push(`customerId=${encodeURIComponent(effectiveCustId)}`);
       const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
 
       try {
-        // 1. Fetch real Wi-Fi IP address URL from backend /api/qr (e.g. http://10.120.60.171:5173/mobile...)
+        // 1. Fetch real Wi-Fi IP address URL from backend /api/qr
         const res = await axios.get(`${config.serverUrl}/api/qr${query}`);
         if (res.data && res.data.url) {
           const lanUrl = res.data.url;
@@ -51,13 +63,17 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
       setLoading(false);
     };
     fetchQR();
-  }, [isOpen, sessionId, customerId]);
+  }, [isOpen, sessionId, shopId, effectiveCustId]);
 
   const handleCopyLink = async () => {
     if (qrData?.url) {
-      await navigator.clipboard.writeText(qrData.url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(qrData.url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // fallback
+      }
     }
   };
 
@@ -68,38 +84,40 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
       <div className="qr-modal-overlay" onClick={onClose}>
         <motion.div
           className="qr-modal-card glass-card"
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          initial={{ opacity: 0, scale: 0.92, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          exit={{ opacity: 0, scale: 0.92, y: 16 }}
+          transition={{ type: 'spring', damping: 26, stiffness: 320 }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="qr-modal-header flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="modal-icon">{customerId ? '📂' : '📱'}</span>
-              <div>
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="modal-icon-badge" style={{ background: effectiveCustId ? '#ECFDF5' : '#EEF2FF', color: effectiveCustId ? '#059669' : '#4F46E5' }}>
+                {effectiveCustId ? '📂' : '📱'}
+              </div>
+              <div className="min-w-0">
                 <h3 className="modal-title">
-                  {customerId ? `Folder QR: ${shopName}` : 'Mobile Connect QR'}
+                  {effectiveCustId ? 'Customer Folder QR' : 'Mobile Connect QR'}
                 </h3>
-                {customerId && (
-                  <p style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
-                    🎯 Target ID: {customerId}
-                  </p>
-                )}
+                <p className="modal-subtitle">
+                  {effectiveCustId
+                    ? `Direct upload to: ${shopName || effectiveCustId}`
+                    : (shopName ? `Shop: ${shopName}` : 'Instant Transfer')}
+                </p>
               </div>
             </div>
-            <button className="btn-icon" onClick={onClose} title="Close Modal">✕</button>
+            <button className="btn-icon qr-close-icon" onClick={onClose} title="Close Modal">✕</button>
           </div>
 
           {/* Mode Switcher (Hide Standee for Folder-Specific QR) */}
-          {!customerId && (
+          {!effectiveCustId && (
             <div className="qr-modal-tabs flex gap-2">
               <button
                 className={`tab-chip ${viewMode === 'qr' ? 'active' : ''}`}
                 onClick={() => setViewMode('qr')}
               >
-                📱 Digital QR Code
+                📱 Digital QR
               </button>
               <button
                 className={`tab-chip ${viewMode === 'standee' ? 'active' : ''}`}
@@ -112,27 +130,33 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
 
           {/* Body */}
           <div className="qr-modal-body">
-            {viewMode === 'qr' || customerId ? (
+            {viewMode === 'qr' || effectiveCustId ? (
               <div className="qr-digital-view">
                 {loading ? (
-                  <div className="qr-loading">Generating Folder QR Code…</div>
+                  <div className="qr-loading">Generating QR Code…</div>
                 ) : qrData ? (
                   <>
-                    <div className="qr-img-wrapper" style={{ border: customerId ? '2px solid var(--accent-primary)' : '1px solid var(--border)' }}>
+                    <div className={`qr-img-wrapper ${effectiveCustId ? 'folder-qr-wrapper' : ''}`}>
                       <img src={qrData.qrDataUrl} alt="Connect QR" className="qr-img" />
+                      {effectiveCustId && (
+                        <div className="folder-qr-target-badge">
+                          <span>📂 {shopName || effectiveCustId}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-center">
-                      <p className="qr-instruction" style={{ fontWeight: 600, color: customerId ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
-                        {customerId
-                          ? `Scan from any phone to upload directly into "${shopName}"`
-                          : 'Scan with any Mobile Camera / Scanner'}
+
+                    <div className="qr-instruction-box text-center">
+                      <p className="qr-instruction">
+                        {effectiveCustId
+                          ? `Scan with phone to upload directly into this folder`
+                          : 'Scan with any phone camera / scanner to connect'}
                       </p>
                     </div>
-                    
-                    <div className="qr-copy-bar flex items-center justify-between">
-                      <span className="url-preview" title={qrData.url}>{qrData.url}</span>
-                      <button className="btn btn-primary btn-sm" onClick={handleCopyLink}>
-                        {copied ? '✓ Copied' : '📋 Copy Link'}
+
+                    <div className="qr-copy-card">
+                      <div className="url-text" title={qrData.url}>{qrData.url}</div>
+                      <button className="btn btn-primary btn-sm copy-btn" onClick={handleCopyLink}>
+                        {copied ? '✓ Copied Link' : '📋 Copy Link'}
                       </button>
                     </div>
                   </>
@@ -158,109 +182,258 @@ export function QRModal({ isOpen, onClose, sessionId, shopName, shopId, customer
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: rgba(15, 23, 42, 0.75);
+            background: rgba(15, 23, 42, 0.72);
             backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             z-index: 99999;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: var(--space-4);
+            padding: 1rem;
+            box-sizing: border-box;
           }
+
           .qr-modal-card {
             width: 100%;
-            max-width: 440px;
-            padding: var(--space-6);
+            max-width: 420px;
+            padding: 1.5rem;
             background: #ffffff;
-            border-radius: var(--radius-xl);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border-radius: 24px;
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.3);
+            border: 1px solid #E2E8F0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            box-sizing: border-box;
+            max-height: 92vh;
+            overflow-y: auto;
           }
+
           .qr-modal-header {
-            margin-bottom: var(--space-4);
+            width: 100%;
+            gap: 8px;
           }
-          .modal-icon { font-size: 1.5rem; }
+
+          .modal-icon-badge {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+          }
+
           .modal-title {
-            font-size: var(--font-size-lg);
-            font-weight: 700;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #0F172A;
+            line-height: 1.2;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
+
+          .modal-subtitle {
+            font-size: 0.76rem;
+            font-weight: 600;
+            color: #64748B;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .qr-close-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #F1F5F9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            color: #64748B;
+            border: none;
+            cursor: pointer;
+            flex-shrink: 0;
+          }
+
+          .qr-close-icon:hover {
+            background: #EF4444;
+            color: white;
+          }
+
           .qr-modal-tabs {
-            margin-bottom: var(--space-5);
-            background: var(--bg-tertiary);
+            background: #F1F5F9;
             padding: 4px;
-            border-radius: var(--radius-full);
+            border-radius: 999px;
+            display: flex;
+            width: 100%;
           }
+
           .tab-chip {
             flex: 1;
-            padding: var(--space-2) var(--space-3);
-            border-radius: var(--radius-full);
+            padding: 8px;
+            border-radius: 999px;
             border: none;
             background: transparent;
-            font-size: var(--font-size-xs);
-            font-weight: 600;
-            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #64748B;
             cursor: pointer;
+            text-align: center;
             transition: all 0.2s ease;
           }
+
           .tab-chip.active {
             background: #ffffff;
-            color: var(--accent-primary);
-            box-shadow: var(--shadow-sm);
+            color: #4F46E5;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
           }
-          .qr-loading {
-            padding: var(--space-8);
-            text-align: center;
-            color: var(--text-muted);
-            font-size: var(--font-size-sm);
-          }
+
           .qr-digital-view {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             width: 100%;
-            text-align: center;
-            gap: 0.75rem;
+            gap: 12px;
           }
+
+          .qr-loading {
+            padding: 2rem;
+            color: #64748B;
+            font-size: 0.85rem;
+            font-weight: 600;
+          }
+
           .qr-img-wrapper {
             background: #ffffff;
-            padding: 16px;
-            border-radius: var(--radius-xl);
+            padding: 14px;
+            border-radius: 20px;
+            border: 2px solid #E2E8F0;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.06);
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            margin: 0 auto;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+            position: relative;
           }
+
+          .qr-img-wrapper.folder-qr-wrapper {
+            border-color: #059669;
+            background: #F0FDF4;
+          }
+
           .qr-img {
-            width: 210px;
-            height: 210px;
+            width: 200px;
+            height: 200px;
             display: block;
+            border-radius: 10px;
           }
-          .qr-instruction {
-            font-size: var(--font-size-xs);
-            color: var(--text-secondary);
-            text-align: center;
-            margin: 0 auto;
+
+          .folder-qr-target-badge {
+            margin-top: 8px;
+            background: #059669;
+            color: white;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 999px;
+            max-width: 210px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
-          .qr-copy-bar {
+
+          .qr-instruction-box {
             width: 100%;
+          }
+
+          .qr-instruction {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #334155;
+            line-height: 1.4;
+            margin: 0;
+          }
+
+          .qr-copy-card {
+            width: 100%;
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 14px;
+            padding: 10px 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 10px;
-            background: var(--bg-tertiary);
-            padding: 8px 12px;
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--border);
-            margin-top: 6px;
+            gap: 8px;
+            box-sizing: border-box;
           }
-          .url-preview {
+
+          .url-text {
             font-size: 11px;
-            color: var(--text-secondary);
+            color: #475569;
             font-family: monospace;
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 230px;
+            flex: 1;
+            min-width: 0;
+          }
+
+          .copy-btn {
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 12px;
+          }
+
+          /* ── Mobile Responsive Breakpoints (<480px) ── */
+          @media (max-width: 480px) {
+            .qr-modal-overlay {
+              padding: 0.625rem;
+            }
+
+            .qr-modal-card {
+              padding: 1.15rem 1rem;
+              border-radius: 20px;
+            }
+
+            .modal-title {
+              font-size: 0.95rem;
+            }
+
+            .modal-icon-badge {
+              width: 36px;
+              height: 36px;
+              font-size: 1.1rem;
+            }
+
+            .qr-img {
+              width: 170px;
+              height: 170px;
+            }
+
+            .qr-copy-card {
+              flex-direction: column;
+              align-items: stretch;
+              gap: 8px;
+              padding: 8px 10px;
+            }
+
+            .url-text {
+              text-align: center;
+              font-size: 10px;
+            }
+
+            .copy-btn {
+              width: 100%;
+              justify-content: center;
+            }
           }
         `}</style>
       </div>

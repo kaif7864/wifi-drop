@@ -63,6 +63,7 @@ export function AuthProvider({ children }) {
       setShop(res.data.shop);
       localStorage.setItem('wifidrop_token', res.data.token);
       localStorage.setItem('wifidrop_shop', JSON.stringify(res.data.shop));
+      localStorage.removeItem('wifidrop_files_cache_guest');
     }
     return res.data;
   }, []);
@@ -74,15 +75,36 @@ export function AuthProvider({ children }) {
       setShop(res.data.shop);
       localStorage.setItem('wifidrop_token', res.data.token);
       localStorage.setItem('wifidrop_shop', JSON.stringify(res.data.shop));
+      localStorage.removeItem('wifidrop_files_cache_guest');
     }
     return res.data;
   }, []);
 
   const logout = useCallback(() => {
+    // 1. Wipe all wifidrop keys from localStorage except user preferences (theme/lang)
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('wifidrop_') || key.startsWith('wifi_drop_'))) {
+          if (key !== 'wifidrop_theme' && key !== 'wifidrop_lang') {
+            keysToRemove.push(key);
+          }
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+
+    // 2. Clear sessionStorage
+    try { sessionStorage.clear(); } catch {}
+
+    // 3. Clear auth state and axios authorization headers
     setToken(null);
     setShop(null);
-    localStorage.removeItem('wifidrop_token');
-    localStorage.removeItem('wifidrop_shop');
+    delete axios.defaults.headers.common['Authorization'];
+
+    // 4. Force guaranteed clean hard page reload to root
+    window.location.replace('/?logout=' + Date.now());
   }, []);
 
   return (

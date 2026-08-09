@@ -128,6 +128,20 @@ export function ShopLogin() {
           font-weight: 600;
           text-decoration: none;
         }
+
+        @media (max-width: 480px) {
+          .auth-container {
+            padding: 1rem;
+          }
+          .auth-card {
+            padding: 1.5rem 1.25rem;
+            border-radius: 16px;
+          }
+          .auth-title {
+            font-size: 1.25rem;
+          }
+        }
+        
         .alert-error {
           background: #fef2f2;
           color: #991b1b;

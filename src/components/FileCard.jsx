@@ -76,8 +76,8 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
     return `${config.serverUrl}${urlStr}`;
   };
 
-  const previewUrl = file.isP2P ? file.previewUrl : getFullUrl(file.previewUrl);
-  const downloadUrl = file.isP2P ? file.downloadUrl : getFullUrl(file.downloadUrl);
+  const previewUrl = file.isP2P ? file.previewUrl : getFullUrl(`/api/files/${fileId}/preview`);
+  const downloadUrl = file.isP2P ? file.downloadUrl : getFullUrl(`/api/files/${fileId}/download`);
 
   // Direct trigger download handling
   const handleDownload = async () => {
@@ -249,7 +249,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
               )}
               {isPdf && (
                 <iframe
-                  src={previewUrl}
+                  src={`${previewUrl}#toolbar=1&navpanes=0`}
                   title={file.originalName}
                   className="preview-iframe"
                 />
@@ -394,6 +394,58 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
         .preview-audio {
           width: 100%;
           max-width: 500px;
+        }
+
+        /* ── Mobile Responsive Breakpoints ── */
+        @media (max-width: 768px) {
+          .file-card {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.75rem;
+            padding: 1rem;
+          }
+
+          .file-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border);
+            width: 100%;
+          }
+
+          .file-actions .btn-print-toggle {
+            padding: 5px 10px;
+            font-size: 11px;
+          }
+
+          .preview-overlay {
+            padding: 0.75rem;
+          }
+
+          .preview-modal {
+            max-height: 90vh;
+          }
+
+          .preview-header {
+            padding: 0.75rem 1rem;
+          }
+
+          .preview-title {
+            max-width: 160px;
+          }
+
+          .preview-body {
+            padding: 1rem;
+            min-height: 220px;
+          }
+
+          .preview-iframe, .preview-image, .preview-video {
+            height: 55vh;
+            max-height: 55vh;
+          }
         }
       `}</style>
     </>

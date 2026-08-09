@@ -495,17 +495,116 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           color: #059669;
         }
 
-        .status-pill.pending {
-          background: #FFFBEB;
-          color: #D97706;
-        }
-
         .form-label {
           display: block;
           font-size: 0.8rem;
           font-weight: 700;
           color: #374151;
           margin-bottom: 6px;
+        }
+
+        /* ── Responsive Breakpoints ── */
+        @media (max-width: 1024px) {
+          .stats-grid {
+            grid-template-columns: repeat(3, 1fr);
+          }
+
+          .dashboard-grid {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto;
+          }
+
+          .activity-card, .recent-card {
+            grid-column: auto;
+            grid-row: auto;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .dashboard-page {
+            gap: 1rem;
+          }
+
+          .dashboard-greeting {
+            padding: 1.25rem;
+            border-radius: 16px;
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .greeting-title {
+            font-size: 1.15rem;
+          }
+
+          .greeting-date {
+            text-align: left;
+            font-size: 0.75rem;
+          }
+
+          .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+          }
+
+          .stat-card {
+            padding: 1rem;
+            gap: 0.75rem;
+          }
+
+          .stat-icon-wrapper {
+            width: 40px;
+            height: 40px;
+            font-size: 1.2rem;
+          }
+
+          .stat-value {
+            font-size: 1.35rem;
+          }
+
+          .dash-card {
+            padding: 1rem 1.15rem;
+            border-radius: 16px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+          }
+
+          .stat-card {
+            padding: 0.75rem 0.6rem;
+            gap: 0.5rem;
+          }
+
+          .stat-icon-wrapper {
+            width: 32px;
+            height: 32px;
+          }
+
+          .stat-value {
+            font-size: 1.2rem;
+          }
+
+          .stat-label {
+            font-size: 0.7rem;
+          }
+
+          .quick-actions-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+          }
+
+          .quick-action-btn {
+            padding: 10px 6px;
+          }
+
+          .qa-icon {
+            width: 32px;
+            height: 32px;
+            font-size: 1rem;
+          }
         }
       `}</style>
     </div>

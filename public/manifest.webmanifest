@@ -1,0 +1,19 @@
+{
+  "short_name": "WiFi Drop",
+  "name": "WiFi Drop — Counter File & Print Hub",
+  "description": "Instant zero-friction local & cloud file sharing for print shops",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F8FAFC",
+  "theme_color": "#4F46E5",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["utilities", "business", "productivity"]
+}

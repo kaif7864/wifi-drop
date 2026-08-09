@@ -159,14 +159,27 @@ export function ShopRegister() {
           font-weight: 700;
           text-decoration: none;
         }
+
+        @media (max-width: 480px) {
+          .auth-container {
+            padding: 1rem;
+          }
+          .auth-card {
+            padding: 1.5rem 1.25rem;
+            border-radius: 16px;
+          }
+          .auth-title {
+            font-size: 1.25rem;
+          }
+        }
         .alert-error {
           background: #fef2f2;
           color: #991b1b;
-          border: 1px solid #fecaca;
-          padding: var(--space-3);
+          padding: var(--space-3) var(--space-4);
           border-radius: var(--radius-md);
           font-size: var(--font-size-xs);
           margin-bottom: var(--space-4);
+          border: 1px solid #fecaca;
         }
         .w-full { width: 100%; }
       `}</style>

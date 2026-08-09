@@ -386,35 +386,21 @@ a:hover { color: var(--accent-secondary); }
   min-height: 120px;
 }
 
-/* ── Toast Notifications ── */
+/* ── Toast Notifications (Top Center Floating Pill) ── */
 .toast-container {
   position: fixed;
-  top: var(--space-6);
-  right: var(--space-6);
-  z-index: var(--z-toast);
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  align-items: center;
+  gap: 10px;
   pointer-events: none;
+  width: max-content;
+  max-width: calc(100vw - 32px);
 }
-
-.toast {
-  background: #FFFFFF;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-5);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  min-width: 300px;
-  max-width: 400px;
-  pointer-events: all;
-}
-
-.toast-success { border-left: 3px solid var(--success); }
-.toast-error   { border-left: 3px solid var(--danger); }
-.toast-info    { border-left: 3px solid var(--accent-primary); }
 
 /* ── Empty State ── */
 .empty-state {
@@ -445,3 +431,36 @@ a:hover { color: var(--accent-secondary); }
 .gap-3 { gap: var(--space-3); }
 .gap-4 { gap: var(--space-4); }
 .w-full { width: 100%; }
+
+/* ── Global Mobile Responsive Media Queries ── */
+@media (max-width: 768px) {
+  :root {
+    --space-6: 1.25rem;
+    --space-8: 1.5rem;
+    --space-12: 2rem;
+  }
+
+  .toast-container {
+    top: var(--space-3);
+    right: var(--space-3);
+    left: var(--space-3);
+    align-items: stretch;
+  }
+
+  .toast {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .empty-state {
+    padding: var(--space-8) var(--space-4);
+    border-radius: var(--radius-lg);
+  }
+
+  .btn {
+    min-height: 38px;
+    touch-action: manipulation;
+  }
+}

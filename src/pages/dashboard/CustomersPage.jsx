@@ -330,6 +330,70 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
         .detail-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; padding-top: 1rem; border-top: 1px solid #F1F5F9; margin-top: auto; }
         .detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2rem; }
         .mt-4 { margin-top: 1rem; }
+
+        /* ── Mobile Responsive Breakpoints ── */
+        @media (max-width: 1024px) {
+          .customers-stats-bar {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .customers-layout {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .customers-page {
+            gap: 1rem;
+          }
+
+          .customers-stats-bar {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+          }
+
+          .cust-stat-card {
+            padding: 0.875rem 1rem;
+            border-radius: 12px;
+          }
+
+          .cust-stat-val {
+            font-size: 1.4rem;
+          }
+
+          .detail-stats-row {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+          }
+
+          .customer-detail-panel {
+            padding: 1rem;
+            border-radius: 14px;
+          }
+
+          .detail-actions {
+            flex-direction: column;
+          }
+
+          .detail-actions .btn {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .customers-stats-bar {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+          }
+
+          .cust-stat-card {
+            padding: 0.75rem;
+          }
+
+          .cust-stat-val {
+            font-size: 1.2rem;
+          }
+        }
       `}</style>
     </div>
   );

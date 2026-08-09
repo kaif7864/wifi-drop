@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { config } from '../config';
 
-export function QRDisplay({ connectedDevice, sessionId }) {
+export function QRDisplay({ connectedDevice, sessionId, shopId }) {
   const [qrData, setQrData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,7 +16,12 @@ export function QRDisplay({ connectedDevice, sessionId }) {
   useEffect(() => {
     const fetchQR = async () => {
       try {
-        const query = sessionId ? `?session=${encodeURIComponent(sessionId)}` : '';
+        const queryParts = [];
+        if (sessionId) queryParts.push(`session=${encodeURIComponent(sessionId)}`);
+        const targetShop = shopId || (sessionId && !sessionId.startsWith('wd_') ? sessionId : null);
+        if (targetShop && targetShop !== 'default') queryParts.push(`shop=${encodeURIComponent(targetShop)}`);
+        const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
         const res = await axios.get(`${config.serverUrl}/api/qr${query}`);
         setQrData(res.data);
       } catch (err) {
@@ -26,7 +31,7 @@ export function QRDisplay({ connectedDevice, sessionId }) {
       }
     };
     fetchQR();
-  }, [sessionId]);
+  }, [sessionId, shopId]);
 
   return (
     <div className="qr-display glass-card">

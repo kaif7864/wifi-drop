@@ -30,6 +30,10 @@ export function CategoryFilter({ currentFilter, onFilterChange }) {
           display: flex;
           align-items: center;
           gap: var(--space-2);
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 4px;
+          width: 100%;
         }
 
         .filter-chip {
@@ -50,6 +54,8 @@ export function CategoryFilter({ currentFilter, onFilterChange }) {
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
           appearance: none;
           -webkit-appearance: none;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .filter-chip:hover {
@@ -64,6 +70,25 @@ export function CategoryFilter({ currentFilter, onFilterChange }) {
           color: #ffffff !important;
           border-color: var(--accent-primary) !important;
           box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important;
+        }
+
+        @media (max-width: 640px) {
+          .filter-bar {
+            margin-bottom: var(--space-3);
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            overflow: visible;
+            padding-bottom: 0;
+          }
+          .filter-chip {
+            padding: 6px 2px;
+            font-size: 10.5px;
+            font-weight: 700;
+            width: 100%;
+            justify-content: center;
+            text-align: center;
+          }
         }
       `}</style>
     </div>

@@ -362,10 +362,40 @@ export function SettingsPage({ shop, sessionId }) {
         .info-rows { display: flex; flex-direction: column; gap: 6px; }
         .info-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #F8FAFC; border-radius: 10px; border: 1px solid #F1F5F9; }
         .info-label { font-size: 0.8rem; font-weight: 700; color: #64748B; }
-        .info-val { font-size: 0.8rem; font-weight: 700; color: #0F172A; font-family: monospace; }
-        .register-cta { margin-top: 1rem; padding: 1rem; background: #EEF2FF; border-radius: 12px; border: 1px solid #C7D2FE; }
-        .printer-status-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #ECFDF5; border-radius: 10px; border: 1px solid #D1FAE5; }
         .settings-footer { display: flex; align-items: center; gap: 0.75rem; padding: 1.25rem 1.5rem; background: white; border: 1px solid #E2E8F0; border-radius: 16px; }
+
+        /* ── Mobile Responsive Breakpoints ── */
+        @media (max-width: 1024px) {
+          .settings-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .settings-page {
+            gap: 1rem;
+          }
+
+          .settings-card {
+            padding: 1.15rem;
+            border-radius: 16px;
+          }
+
+          .form-row {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .settings-footer {
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 1rem;
+          }
+
+          .settings-footer .btn {
+            width: 100%;
+          }
+        }
       `}</style>
     </div>
   );

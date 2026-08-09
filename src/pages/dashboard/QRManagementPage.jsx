@@ -37,24 +37,24 @@ function QRTypeCard({ icon, title, desc, badge, children, color = '#4F46E5' }) {
   );
 }
 
-export function QRManagementPage({ sessionId, shop, files }) {
+export function QRManagementPage({ sessionId, shop, files = [] }) {
   const [permQrOpen, setPermQrOpen] = useState(false);
 
   // Temp QR state
   const [tempCustName, setTempCustName] = useState('');
   const [tempExpiry, setTempExpiry] = useState('1h');
+  const [tempQrs, setTempQrs] = useState([]);
+  const [, setLoadingQrs] = useState(false);
   const [tempQrOpen, setTempQrOpen] = useState(false);
   const [tempSessionId, setTempSessionId] = useState('');
-  const [tempQrs, setTempQrs] = useState([]);
-  const [loadingQrs, setLoadingQrs] = useState(true);
 
-  // Folder QR state  
+  // Folder QR state
   const [folderCustId, setFolderCustId] = useState('');
   const [folderQrOpen, setFolderQrOpen] = useState(false);
 
   const shopId = shop?.shopId || 'default';
 
-  // Fetch temp QRs from backend on mount
+  // Load temp QRs on mount
   useEffect(() => {
     fetchTempQrs();
   }, [shopId]);
@@ -76,10 +76,10 @@ export function QRManagementPage({ sessionId, shop, files }) {
   // Get unique customer folders from files
   const customerFolders = (() => {
     const map = {};
-    files.forEach((f) => {
-      const cid = f.customerId || 'cust_anonymous';
+    (files || []).forEach((f) => {
+      const cid = f?.customerId || 'cust_anonymous';
       if (!map[cid]) {
-        map[cid] = { id: cid, name: f.customerName || f.deviceName || cid, count: 0 };
+        map[cid] = { id: cid, name: f?.customerName || f?.deviceName || cid, count: 0 };
       }
       map[cid].count++;
     });
@@ -174,7 +174,8 @@ export function QRManagementPage({ sessionId, shop, files }) {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => {
-                const url = `${window.location.origin}/mobile?session=${encodeURIComponent(sessionId)}`;
+                const shopPart = shopId ? `&shop=${encodeURIComponent(shopId)}` : '';
+                const url = `${window.location.origin}/mobile?session=${encodeURIComponent(sessionId)}${shopPart}`;
                 navigator.clipboard.writeText(url);
                 alert('Link copied!');
               }}
@@ -330,8 +331,13 @@ export function QRManagementPage({ sessionId, shop, files }) {
           isOpen={folderQrOpen}
           onClose={() => setFolderQrOpen(false)}
           sessionId={sessionId}
+          customerId={folderCustId}
           targetCustomerId={folderCustId}
-          shopName={shop?.shopName}
+          shopName={
+            customerFolders.find((c) => c.id === folderCustId)?.name ||
+            shop?.shopName ||
+            folderCustId
+          }
           shopId={shop?.shopId}
         />
       )}
@@ -366,6 +372,39 @@ export function QRManagementPage({ sessionId, shop, files }) {
         .status-pill { font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
         .status-pill.printed { background: #ECFDF5; color: #059669; }
         .status-pill.pending { background: #FEF2F2; color: #EF4444; }
+
+        /* ── Mobile Responsive Breakpoints ── */
+        @media (max-width: 1024px) {
+          .qr-types-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .qr-management-page {
+            gap: 1rem;
+          }
+
+          .qr-page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+          }
+
+          .qr-type-card {
+            padding: 1.15rem;
+            border-radius: 16px;
+          }
+
+          .temp-qr-table-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .print-table {
+            min-width: 540px;
+          }
+        }
       `}</style>
     </div>
   );
