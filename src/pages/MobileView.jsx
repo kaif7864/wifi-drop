@@ -73,6 +73,7 @@ export function MobileView() {
   });
 
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploadErrorMsg, setUploadErrorMsg] = useState('');
   const [fileNotes, setFileNotes] = useState({});
   const [textInput, setTextInput] = useState('');
   const [uploadStatus, setUploadStatus] = useState(null); // null | 'success' | 'error'
@@ -174,6 +175,7 @@ export function MobileView() {
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
     setUploadStatus(null);
+    setUploadErrorMsg('');
 
     // 1. WebRTC Direct P2P Transfer (if peer is connected)
     if (peerState === 'connected' && sendFileP2P) {
@@ -193,7 +195,7 @@ export function MobileView() {
       }
     }
 
-    // 2. Cloud Inbox & HTTP Upload (Works even if laptop dashboard is closed!)
+    // 2. Cloud Inbox & HTTP Upload
     try {
       await uploadFiles(
         selectedFiles,
@@ -212,9 +214,11 @@ export function MobileView() {
       if (docInputRef.current) docInputRef.current.value = '';
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     } catch (err) {
-      console.error('[Upload Error]:', err);
+      const errMsg = err?.response?.data?.error || err?.message || 'Unknown error';
+      const errStatus = err?.response?.status;
+      console.error('[Upload Error]:', errStatus, errMsg, err);
       // 3. Offline Staging: Store in IndexedDB if offline or disconnected
-      if (!navigator.onLine || !connected) {
+      if (!navigator.onLine || errMsg.includes('Network') || errMsg.includes('timeout')) {
         try {
           for (let i = 0; i < selectedFiles.length; i++) {
             const f = selectedFiles[i];
@@ -240,6 +244,7 @@ export function MobileView() {
           console.warn('[Offline Queue Staging Error]:', queueErr);
         }
       }
+      setUploadErrorMsg(`${errStatus ? errStatus + ': ' : ''}${errMsg}`);
       setUploadStatus('error');
     }
   };
@@ -546,12 +551,12 @@ export function MobileView() {
                 )}
                 {uploadStatus === 'error' && (
                   <motion.div
-                    className="status-msg status-error"
+                    style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', padding: '10px 14px', borderRadius: '12px', fontSize: '0.78rem', fontWeight: 600, textAlign: 'center' }}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
                   >
-                    ❌ Upload failed. Try again.
+                    ❌ Upload failed{uploadErrorMsg ? `: ${uploadErrorMsg}` : '. Try again.'}
                   </motion.div>
                 )}
               </AnimatePresence>
