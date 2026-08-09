@@ -47,8 +47,10 @@ function getShopAndSessionFromUrl() {
     resolvedShopId = rawSession;
   }
 
+  const effectiveSessionId = rawSession || (resolvedShopId !== 'default' ? resolvedShopId : null);
+
   return {
-    sessionId: rawSession,
+    sessionId: effectiveSessionId,
     shopId: resolvedShopId,
     targetCustomerId: targetCustId,
   };

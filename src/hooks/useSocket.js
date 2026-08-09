@@ -57,5 +57,16 @@ export function useSocket(role, deviceName = 'Browser', sessionId = null) {
     };
   }, []);
 
+  // Re-join room whenever sessionId changes or connection restores
+  useEffect(() => {
+    if (connected && socketRef.current && sessionId) {
+      socketRef.current.emit('join_session', {
+        sessionId,
+        name: deviceName,
+        role,
+      });
+    }
+  }, [connected, sessionId, deviceName, role]);
+
   return { socket: socketRef.current, connected };
 }
