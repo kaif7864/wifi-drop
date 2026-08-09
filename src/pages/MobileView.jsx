@@ -71,6 +71,7 @@ export function MobileView() {
   });
 
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [fileNotes, setFileNotes] = useState({});
   const [textInput, setTextInput] = useState('');
   const [uploadStatus, setUploadStatus] = useState(null); // null | 'success' | 'error'
   const [p2pProgress, setP2pProgress] = useState(0);
@@ -85,6 +86,10 @@ export function MobileView() {
     const val = e.target.value;
     setCustomerName(val);
     try { localStorage.setItem('wifidrop_customer_name', val); } catch {}
+  };
+
+  const handleFileNoteChange = (index, value) => {
+    setFileNotes((prev) => ({ ...prev, [index]: value }));
   };
 
   const galleryInputRef = useRef(null);
@@ -112,10 +117,16 @@ export function MobileView() {
 
   const removeSelectedFile = (indexToRemove) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== indexToRemove));
+    setFileNotes((prev) => {
+      const next = { ...prev };
+      delete next[indexToRemove];
+      return next;
+    });
   };
 
   const clearAllSelectedFiles = () => {
     setSelectedFiles([]);
+    setFileNotes({});
   };
 
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
@@ -159,10 +170,12 @@ export function MobileView() {
         shopId,
         effectiveCustomerId,
         customerName.trim() || null,
-        customerFp?.customerId
+        customerFp?.customerId,
+        fileNotes
       );
       setUploadStatus('success');
       setSelectedFiles([]);
+      setFileNotes({});
       if (galleryInputRef.current) galleryInputRef.current.value = '';
       if (docInputRef.current) docInputRef.current.value = '';
       if (cameraInputRef.current) cameraInputRef.current.value = '';
@@ -361,61 +374,81 @@ export function MobileView() {
                       Clear All 🗑️
                     </button>
                   </div>
-                  {selectedFiles.map((f, i) => (
-                    <div
-                      key={`${f.name}_${i}`}
-                      className="file-item-card"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '10px',
-                        background: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '12px',
-                        padding: '10px 12px',
-                        marginBottom: '8px',
-                        width: '100%',
-                        minWidth: 0,
-                        boxSizing: 'border-box',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
-                        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>
-                          {f.type?.startsWith('image/') ? '🖼️' : f.type?.includes('pdf') ? '📄' : '📁'}
-                        </span>
-                        <span
-                          title={f.name}
-                          style={{
-                            display: 'block',
-                            fontSize: '0.82rem',
-                            fontWeight: 600,
-                            color: '#1E293B',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            flex: 1,
-                            minWidth: 0,
-                          }}
-                        >
-                          {f.name}
-                        </span>
+                  {selectedFiles.map((f, i) => {
+                    const isPdfFile = f.type?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf');
+                    return (
+                      <div
+                        key={`${f.name}_${i}`}
+                        className="file-item-card-wrap"
+                        style={{
+                          background: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '14px',
+                          padding: '10px 12px',
+                          marginBottom: '8px',
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
+                            <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>
+                              {f.type?.startsWith('image/') ? '🖼️' : isPdfFile ? '📄' : '📁'}
+                            </span>
+                            <span
+                              title={f.name}
+                              style={{
+                                display: 'block',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                color: '#1E293B',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1,
+                                minWidth: 0,
+                              }}
+                            >
+                              {f.name}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
+                              {(f.size / 1024).toFixed(1)} KB
+                            </span>
+                            <button
+                              className="btn-remove-selected"
+                              onClick={() => removeSelectedFile(i)}
+                              title="Remove file"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* File Password / Note Input */}
+                        <div className="file-note-input-row">
+                          <span className="file-note-icon">🔑</span>
+                          <input
+                            type="text"
+                            className="file-note-input"
+                            placeholder={
+                              isPdfFile
+                                ? 'PDF password or instructions (e.g. Aadhaar DOB)...'
+                                : 'Print note (e.g. Color 2 copies, Photo paper)...'
+                            }
+                            value={fileNotes[i] || ''}
+                            onChange={(e) => handleFileNoteChange(i, e.target.value)}
+                            maxLength={70}
+                          />
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                        <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
-                          {(f.size / 1024).toFixed(1)} KB
-                        </span>
-                        <button
-                          className="btn-remove-selected"
-                          onClick={() => removeSelectedFile(i)}
-                          title="Remove file"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -685,6 +718,46 @@ export function MobileView() {
           color: var(--text-muted);
           font-weight: 400;
           font-size: var(--font-size-xs);
+        }
+
+        .file-note-input-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 8px;
+          padding: 5px 8px;
+          transition: all 0.2s ease;
+        }
+
+        .file-note-input-row:focus-within {
+          border-color: #6366F1;
+          background: #EEF2FF;
+          box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+        }
+
+        .file-note-icon {
+          font-size: 11px;
+          opacity: 0.75;
+          flex-shrink: 0;
+        }
+
+        .file-note-input {
+          border: none;
+          background: transparent;
+          font-size: 11px;
+          font-weight: 600;
+          color: #1E293B;
+          width: 100%;
+          outline: none;
+          padding: 0;
+        }
+
+        .file-note-input::placeholder {
+          color: #94A3B8;
+          font-weight: 400;
+          font-size: 10.5px;
         }
 
         .mobile-header {

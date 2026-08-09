@@ -127,7 +127,7 @@ export function useTransfer(shopId = null) {
   }, [shopId]);
 
   // ── Upload files from mobile ──────────────────────────────────────────────
-  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null, shopId = 'default', customerId = null, customerName = null, deviceId = null) => {
+  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null, shopId = 'default', customerId = null, customerName = null, deviceId = null, fileNotes = {}) => {
     setUploading(true);
     setUploadProgress(0);
     setError(null);
@@ -139,6 +139,9 @@ export function useTransfer(shopId = null) {
     if (customerId) formData.append('customerId', customerId);
     if (customerName) formData.append('customerName', customerName);
     if (deviceId) formData.append('deviceId', deviceId);
+    if (fileNotes && Object.keys(fileNotes).length > 0) {
+      formData.append('fileNotes', JSON.stringify(fileNotes));
+    }
     Array.from(fileList).forEach((file) => formData.append('files', file));
 
     try {

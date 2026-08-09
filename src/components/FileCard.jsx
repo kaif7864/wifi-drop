@@ -143,6 +143,39 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
             <p className="file-name" title={file.originalName} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, width: '100%' }}>
               {file.originalName}
             </p>
+            {file.note && (
+              <div
+                className="file-password-badge"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: '#FEF3C7',
+                  border: '1px solid #FDE68A',
+                  color: '#92400E',
+                  borderRadius: '6px',
+                  padding: '2px 8px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  marginTop: '3px',
+                  marginBottom: '2px',
+                  cursor: 'pointer',
+                  width: 'fit-content',
+                  maxWidth: '100%',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    navigator.clipboard.writeText(file.note);
+                  } catch {}
+                }}
+                title="Click to copy file password / note"
+              >
+                <span>🔑</span>
+                <span style={{ fontFamily: 'monospace', color: '#B45309', fontWeight: 800 }}>{file.note}</span>
+                <span style={{ fontSize: '10px', opacity: 0.8 }}>📋 Copy</span>
+              </div>
+            )}
             <div className="file-meta">
               <span>{formatBytes(file.size)}</span>
               {file.pageCount && file.pageCount > 1 && (
