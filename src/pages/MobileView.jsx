@@ -140,6 +140,17 @@ export function MobileView() {
           try {
             if (item.type === 'text') {
               await sendText(item.text, item.deviceName, item.sessionId, item.shopId, item.customerId, item.customerName);
+            } else if (item.type === 'file' && item.file) {
+              await uploadFiles(
+                [item.file],
+                item.deviceName,
+                item.sessionId,
+                item.shopId,
+                item.customerId,
+                item.customerName,
+                null,
+                { '0': item.note || '' }
+              );
             }
             await clearStagedItem(item.id);
           } catch {}
@@ -155,13 +166,32 @@ export function MobileView() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [sendText]);
+  }, [sendText, uploadFiles]);
 
   // Reliable persistent upload directly to server storage and socket delivery
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
     setUploadStatus(null);
 
+    // 1. WebRTC Direct P2P Transfer (if peer is connected)
+    if (peerState === 'connected' && sendFileP2P) {
+      try {
+        setIsP2pUploading(true);
+        for (const file of selectedFiles) {
+          await sendFileP2P(file, (pct) => setP2pProgress(pct));
+        }
+        setUploadStatus('success');
+        setSelectedFiles([]);
+        setFileNotes({});
+        setIsP2pUploading(false);
+        return;
+      } catch (p2pErr) {
+        console.warn('[P2P Upload fallback to HTTP]:', p2pErr);
+        setIsP2pUploading(false);
+      }
+    }
+
+    // 2. Cloud Inbox & HTTP Upload (Works even if laptop dashboard is closed!)
     try {
       await uploadFiles(
         selectedFiles,
@@ -181,6 +211,33 @@ export function MobileView() {
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     } catch (err) {
       console.error('[Upload Error]:', err);
+      // 3. Offline Staging: Store in IndexedDB if offline or disconnected
+      if (!navigator.onLine || !connected) {
+        try {
+          for (let i = 0; i < selectedFiles.length; i++) {
+            const f = selectedFiles[i];
+            await stageUploadInQueue({
+              type: 'file',
+              file: f,
+              fileName: f.name,
+              fileSize: f.size,
+              fileType: f.type,
+              note: fileNotes[i] || '',
+              deviceName: effectiveDeviceName,
+              sessionId,
+              shopId,
+              customerId: effectiveCustomerId,
+              customerName: customerName.trim() || null,
+            });
+          }
+          setUploadStatus('queued');
+          setSelectedFiles([]);
+          setFileNotes({});
+          return;
+        } catch (queueErr) {
+          console.warn('[Offline Queue Staging Error]:', queueErr);
+        }
+      }
       setUploadStatus('error');
     }
   };
@@ -472,6 +529,17 @@ export function MobileView() {
                     exit={{ opacity: 0 }}
                   >
                     ✅ Files sent to laptop!
+                  </motion.div>
+                )}
+                {uploadStatus === 'queued' && (
+                  <motion.div
+                    className="status-msg"
+                    style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', padding: '10px 14px', borderRadius: '12px', fontSize: '0.82rem', fontWeight: 700, textAlign: 'center' }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    ☁️ Saved in Offline Queue! Will auto-send when connection restores.
                   </motion.div>
                 )}
                 {uploadStatus === 'error' && (
