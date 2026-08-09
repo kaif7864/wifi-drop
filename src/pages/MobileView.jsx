@@ -180,7 +180,7 @@ export function MobileView() {
       try {
         setIsP2pUploading(true);
         for (const file of selectedFiles) {
-          await sendFileP2P(file, (pct) => setP2pProgress(pct));
+          await sendFileP2P(file, effectiveDeviceName, effectiveCustomerId, customerName.trim() || null, (pct) => setP2pProgress(pct));
         }
         setUploadStatus('success');
         setSelectedFiles([]);
@@ -296,13 +296,13 @@ export function MobileView() {
           <span className="mobile-logo-text">{config.appName}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="dot dot-success" />
+          <span className={`dot ${connected || peerState === 'connected' ? 'dot-success' : 'dot-warning'}`} />
           <span className="mobile-status-text">
             {peerState === 'connected'
-              ? '⚡ P2P Direct'
+              ? 'P2P Direct'
               : connected
-              ? '🟢 Live Relay'
-              : '☁️ Cloud Inbox Ready'}
+              ? 'Live Relay'
+              : 'Cloud Inbox Ready'}
           </span>
         </div>
       </header>

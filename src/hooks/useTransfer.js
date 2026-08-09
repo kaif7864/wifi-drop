@@ -146,7 +146,6 @@ export function useTransfer(shopId = null) {
 
     try {
       const response = await axios.post(`${BASE_URL}/api/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const percent = Math.round(
             (progressEvent.loaded * 100) / (progressEvent.total || 1)
