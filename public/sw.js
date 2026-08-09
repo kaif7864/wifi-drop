@@ -40,6 +40,9 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event — Network first, fallback to cache
 self.addEventListener('fetch', (event) => {
+  // Only handle HTTP/HTTPS requests (ignores chrome-extension://, moz-extension://, etc.)
+  if (!event.request.url.startsWith('http')) return;
+
   // Skip API requests and Socket.io requests from caching
   if (
     event.request.url.includes('/api/') ||
