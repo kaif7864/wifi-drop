@@ -1,6 +1,6 @@
 /**
  * client/src/pages/dashboard/QRManagementPage.jsx
- * Page: QR Management — 3 QR Types (Permanent, Temp, Folder-Specific)
+ * Page: QR Management — 4 QR Types (Permanent, Temp Upload, View-Only with Expiry, Folder-Specific)
  * Connected to Temp QR Backend REST APIs & DB Persistence
  */
 
@@ -40,13 +40,20 @@ function QRTypeCard({ icon, title, desc, badge, children, color = '#4F46E5' }) {
 export function QRManagementPage({ sessionId, shop, files = [] }) {
   const [permQrOpen, setPermQrOpen] = useState(false);
 
-  // Temp QR state
+  // Temp Upload QR state
   const [tempCustName, setTempCustName] = useState('');
   const [tempExpiry, setTempExpiry] = useState('1h');
   const [tempQrs, setTempQrs] = useState([]);
   const [, setLoadingQrs] = useState(false);
   const [tempQrOpen, setTempQrOpen] = useState(false);
   const [tempSessionId, setTempSessionId] = useState('');
+
+  // View-Only Temp QR state (with Expiry)
+  const [viewCustFolderId, setViewCustFolderId] = useState('');
+  const [viewCustCustomName, setViewCustCustomName] = useState('');
+  const [viewExpiry, setViewExpiry] = useState('4h');
+  const [viewQrOpen, setViewQrOpen] = useState(false);
+  const [activeViewQrData, setActiveViewQrData] = useState(null);
 
   // Folder QR state
   const [folderCustId, setFolderCustId] = useState('');
@@ -93,6 +100,8 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         customerName: tempCustName.trim(),
         expiry: tempExpiry,
         shopId,
+        mode: 'upload',
+        isViewOnly: false,
       });
       if (res.data.success) {
         const newQr = res.data.qr;
@@ -103,6 +112,38 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
       }
     } catch (err) {
       alert('Error creating temp QR: ' + (err.response?.data?.error || err.message));
+    }
+  }
+
+  async function generateViewOnlyQr() {
+    const targetFolder = customerFolders.find((c) => c.id === viewCustFolderId);
+    const targetName = (targetFolder ? targetFolder.name : viewCustCustomName).trim();
+    if (!targetName) {
+      alert('Please select an existing customer folder or enter customer name');
+      return;
+    }
+
+    try {
+      const res = await axios.post(`${config.serverUrl}/api/qr/temp`, {
+        customerName: targetName,
+        expiry: viewExpiry,
+        shopId,
+        mode: 'view_only',
+        isViewOnly: true,
+        targetCustomerId: viewCustFolderId || null,
+      });
+      if (res.data.success) {
+        const newQr = res.data.qr;
+        setTempQrs((prev) => [newQr, ...prev]);
+        setActiveViewQrData({
+          qrId: newQr.qrId,
+          targetCustomerId: viewCustFolderId || null,
+          customerName: targetName,
+        });
+        setViewQrOpen(true);
+      }
+    } catch (err) {
+      alert('Error creating View-Only QR: ' + (err.response?.data?.error || err.message));
     }
   }
 
@@ -142,21 +183,21 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         <div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>📱 QR Code Management</h2>
           <p style={{ fontSize: '0.82rem', color: '#64748B', marginTop: '2px' }}>
-            Create and manage all 3 types of QR codes for your shop
+            Create permanent, temporary upload, and time-limited customer View-Only QR codes
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="qr-count-badge">Temp Active: {tempQrs.filter((q) => q.active && new Date(q.expiresAt).getTime() > Date.now()).length}</span>
+          <span className="qr-count-badge">Active Tokens: {tempQrs.filter((q) => q.active && new Date(q.expiresAt).getTime() > Date.now()).length}</span>
         </div>
       </div>
 
-      {/* 3 QR Types Grid */}
+      {/* 4 QR Types Grid */}
       <div className="qr-types-grid">
         {/* Type 1: Permanent */}
         <QRTypeCard
           icon="📌"
           title="Permanent QR"
-          desc="Always active. Used for counter standee. Files go to shared stream."
+          desc="Always active. Used for counter standee. Uploads go to shared stream."
           badge="Permanent"
           color="#4F46E5"
         >
@@ -177,7 +218,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                 const shopPart = shopId ? `&shop=${encodeURIComponent(shopId)}` : '';
                 const url = `${window.location.origin}/mobile?session=${encodeURIComponent(sessionId)}${shopPart}`;
                 navigator.clipboard.writeText(url);
-                alert('Link copied!');
+                alert('Permanent link copied!');
               }}
             >
               🔗 Copy Link
@@ -185,11 +226,59 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
           </div>
         </QRTypeCard>
 
-        {/* Type 2: Temporary */}
+        {/* Type 2: Customer View-Only with Expiry */}
+        <QRTypeCard
+          icon="👁️"
+          title="Customer View-Only QR"
+          desc="Time-limited portal. Customer can view their files & live print status."
+          badge="View Portal"
+          color="#7C3AED"
+        >
+          <div className="temp-form">
+            <div>
+              <label className="form-label">Select Customer Folder</label>
+              <select
+                className="input input-sm"
+                value={viewCustFolderId}
+                onChange={(e) => setViewCustFolderId(e.target.value)}
+              >
+                <option value="">-- Choose Existing Folder --</option>
+                {customerFolders.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.count} files)</option>
+                ))}
+              </select>
+            </div>
+            {!viewCustFolderId && (
+              <div>
+                <label className="form-label">Or Customer Name / Token</label>
+                <input
+                  type="text"
+                  className="input input-sm"
+                  placeholder="e.g. Ramesh Bhai #4"
+                  value={viewCustCustomName}
+                  onChange={(e) => setViewCustCustomName(e.target.value)}
+                />
+              </div>
+            )}
+            <div>
+              <label className="form-label">Access Expiry Time</label>
+              <select className="input input-sm" value={viewExpiry} onChange={(e) => setViewExpiry(e.target.value)}>
+                {EXPIRY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="qr-card-actions">
+            <button className="btn btn-sm w-full" style={{ background: '#7C3AED', color: 'white', fontWeight: 700 }} onClick={generateViewOnlyQr}>
+              👁️ Generate View-Only QR
+            </button>
+          </div>
+        </QRTypeCard>
+
+        {/* Type 3: Temporary Upload */}
         <QRTypeCard
           icon="⏱️"
-          title="Temporary QR"
-          desc="Expires after set time. Create for specific customer tokens or sessions."
+          title="Temporary Upload QR"
+          desc="Expires after set time. Creates a temporary upload token for walk-ins."
           badge="Time-Limited"
           color="#D97706"
         >
@@ -212,22 +301,22 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
             </div>
           </div>
           <div className="qr-card-actions">
-            <button className="btn btn-sm" style={{ background: '#D97706', color: 'white' }} onClick={generateTempQr}>
-              🔴 Generate Temp QR
+            <button className="btn btn-sm w-full" style={{ background: '#D97706', color: 'white', fontWeight: 700 }} onClick={generateTempQr}>
+              🔴 Generate Temp Upload QR
             </button>
           </div>
         </QRTypeCard>
 
-        {/* Type 3: Folder-Specific */}
+        {/* Type 4: Folder-Specific Direct Upload */}
         <QRTypeCard
           icon="📂"
           title="Folder-Specific QR"
-          desc="Files from ANY device always go to the selected customer's folder."
+          desc="Files from ANY phone automatically route into the chosen folder."
           badge="Targeted"
           color="#059669"
         >
           <p className="qr-info-text">
-            Perfect for serving walk-in customers. Share this QR and their files will automatically appear in the selected customer's folder.
+            Share this QR with a specific customer and all uploads from their phone will go straight into their designated folder.
           </p>
           <div>
             <label className="form-label">Select Customer Folder</label>
@@ -239,24 +328,25 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
             </select>
           </div>
           <div className="qr-card-actions">
-            <button className="btn btn-sm" style={{ background: '#059669', color: 'white' }} onClick={openFolderQr}>
+            <button className="btn btn-sm w-full" style={{ background: '#059669', color: 'white', fontWeight: 700 }} onClick={openFolderQr}>
               📂 Generate Folder QR
             </button>
           </div>
         </QRTypeCard>
       </div>
 
-      {/* Active Temp QRs Table */}
+      {/* Active Time-Limited QRs Table */}
       {tempQrs.length > 0 && (
         <div className="temp-qr-section">
-          <h3 className="section-title">⏱️ Temporary QR History</h3>
+          <h3 className="section-title">⏱️ Active Temporary & View-Only QR History</h3>
           <div className="temp-qr-table-wrap">
             <table className="print-table">
               <thead>
                 <tr>
-                  <th>Customer / Token</th>
-                  <th>Session ID</th>
-                  <th>Expires In</th>
+                  <th>Type</th>
+                  <th>Customer / Folder</th>
+                  <th>Token ID</th>
+                  <th>Time Remaining</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -267,10 +357,25 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                   const expTime = new Date(q.expiresAt).getTime();
                   const expired = expTime < Date.now();
                   const isActive = q.active && !expired;
+                  const isViewOnly = q.isViewOnly || q.mode === 'view_only';
+
                   return (
                     <tr key={targetId}>
+                      <td>
+                        <span style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          background: isViewOnly ? '#F3E8FF' : '#FEF3C7',
+                          color: isViewOnly ? '#7C3AED' : '#D97706',
+                          border: `1px solid ${isViewOnly ? '#DDD6FE' : '#FDE68A'}`,
+                        }}>
+                          {isViewOnly ? '👁️ View-Only' : '📤 Upload'}
+                        </span>
+                      </td>
                       <td><span style={{ fontWeight: 700 }}>{q.customerName || q.customer}</span></td>
-                      <td><code style={{ fontSize: '0.75rem', color: '#D97706' }}>{targetId}</code></td>
+                      <td><code style={{ fontSize: '0.75rem', color: '#64748B' }}>{targetId}</code></td>
                       <td>
                         <span style={{ fontSize: '0.8rem', color: isActive ? '#059669' : '#EF4444', fontWeight: 700 }}>
                           {!q.active ? '🚫 Revoked' : timeLeft(q.expiresAt)}
@@ -287,9 +392,34 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                             <>
                               <button
                                 className="btn btn-ghost btn-xs"
-                                onClick={() => { setTempSessionId(targetId); setTempQrOpen(true); }}
+                                onClick={() => {
+                                  if (isViewOnly) {
+                                    setActiveViewQrData({
+                                      qrId: targetId,
+                                      targetCustomerId: q.targetCustomerId || null,
+                                      customerName: q.customerName,
+                                    });
+                                    setViewQrOpen(true);
+                                  } else {
+                                    setTempSessionId(targetId);
+                                    setTempQrOpen(true);
+                                  }
+                                }}
                               >
                                 📱 Show QR
+                              </button>
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                onClick={() => {
+                                  const shopPart = shopId ? `&shop=${encodeURIComponent(shopId)}` : '';
+                                  const custPart = q.targetCustomerId ? `&customerId=${encodeURIComponent(q.targetCustomerId)}` : '';
+                                  const viewPart = isViewOnly ? '&view=only' : '';
+                                  const url = `${window.location.origin}/mobile?session=${encodeURIComponent(targetId)}${shopPart}${custPart}${viewPart}`;
+                                  navigator.clipboard.writeText(url);
+                                  alert('Link copied to clipboard!');
+                                }}
+                              >
+                                🔗 Copy Link
                               </button>
                               <button className="btn btn-ghost btn-xs" style={{ color: '#EF4444' }} onClick={() => revokeTemp(targetId)}>
                                 🚫 Revoke
@@ -321,8 +451,21 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
           isOpen={tempQrOpen}
           onClose={() => setTempQrOpen(false)}
           sessionId={tempSessionId}
-          shopName={`Temp QR`}
+          shopName={`Temp Upload Token`}
           shopId={shop?.shopId}
+        />
+      )}
+
+      {viewQrOpen && activeViewQrData && (
+        <QRModal
+          isOpen={viewQrOpen}
+          onClose={() => setViewQrOpen(false)}
+          sessionId={activeViewQrData.qrId}
+          targetCustomerId={activeViewQrData.targetCustomerId}
+          customerId={activeViewQrData.targetCustomerId}
+          shopName={`${activeViewQrData.customerName} (View Portal)`}
+          shopId={shop?.shopId}
+          isViewOnly={true}
         />
       )}
 
@@ -346,7 +489,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         .qr-management-page { display: flex; flex-direction: column; gap: 1.5rem; width: 100%; }
         .qr-page-header { display: flex; align-items: center; justify-content: space-between; }
         .qr-count-badge { font-size: 0.8rem; font-weight: 700; padding: 6px 14px; border-radius: 999px; background: #ECFDF5; color: #059669; border: 1px solid #D1FAE5; }
-        .qr-types-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+        .qr-types-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
         .qr-type-card { background: white; border: 1px solid #E2E8F0; border-radius: 20px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 1rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
         .qr-type-card:hover { border-color: var(--qc); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
         .qr-type-header { display: flex; align-items: flex-start; gap: 12px; }
@@ -354,12 +497,12 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         .qr-type-title { font-size: 1rem; font-weight: 900; color: #0F172A; }
         .qr-type-desc { font-size: 0.78rem; color: #64748B; margin-top: 3px; line-height: 1.5; }
         .qr-badge { font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
-        .qr-type-body { display: flex; flex-direction: column; gap: 0.75rem; }
+        .qr-type-body { display: flex; flex-direction: column; gap: 0.75rem; flex: 1; }
         .qr-info-text { font-size: 0.8rem; color: #64748B; line-height: 1.6; background: #F8FAFC; padding: 10px 12px; border-radius: 10px; border: 1px solid #F1F5F9; }
         .qr-session-id { display: flex; align-items: center; gap: 8px; background: #F8FAFC; padding: 8px 12px; border-radius: 8px; border: 1px solid #F1F5F9; }
         .qr-session-label { font-size: 0.75rem; font-weight: 700; color: #64748B; }
         .qr-session-val { font-size: 0.75rem; color: #4F46E5; }
-        .qr-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+        .qr-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
         .temp-form { display: flex; flex-direction: column; gap: 8px; }
         .form-label { display: block; font-size: 0.78rem; font-weight: 700; color: #374151; margin-bottom: 4px; }
         .section-title { font-size: 0.95rem; font-weight: 800; color: #0F172A; margin-bottom: 0.75rem; }
@@ -368,43 +511,6 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         .print-table th { background: #F8FAFC; padding: 10px 14px; text-align: left; font-size: 0.76rem; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #E2E8F0; }
         .print-table td { padding: 12px 14px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
         .print-table tr:last-child td { border-bottom: none; }
-        .print-table tr:hover td { background: #F8FAFC; }
-        .status-pill { font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
-        .status-pill.printed { background: #ECFDF5; color: #059669; }
-        .status-pill.pending { background: #FEF2F2; color: #EF4444; }
-
-        /* ── Mobile Responsive Breakpoints ── */
-        @media (max-width: 1024px) {
-          .qr-types-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .qr-management-page {
-            gap: 1rem;
-          }
-
-          .qr-page-header {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.5rem;
-          }
-
-          .qr-type-card {
-            padding: 1.15rem;
-            border-radius: 16px;
-          }
-
-          .temp-qr-table-wrap {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-          }
-
-          .print-table {
-            min-width: 540px;
-          }
-        }
       `}</style>
     </div>
   );

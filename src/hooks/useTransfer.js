@@ -212,11 +212,12 @@ export function useTransfer(shopId = null) {
   }, []);
 
   // ── Fetch existing history on mount ──────────────────────────────────────
-  const fetchHistory = useCallback(async (fetchShopId = null, fetchSessionId = null, fetchToken = null) => {
+  const fetchHistory = useCallback(async (fetchShopId = null, fetchSessionId = null, fetchToken = null, fetchCustomerId = null) => {
     try {
       const params = {};
       if (fetchShopId) params.shopId = fetchShopId;
       if (fetchSessionId) params.session = fetchSessionId;
+      if (fetchCustomerId) params.customerId = fetchCustomerId;
 
       const headers = {};
       const resolvedToken = fetchToken || (fetchShopId ? localStorage.getItem('wifidrop_token') : null);
@@ -232,8 +233,13 @@ export function useTransfer(shopId = null) {
 
       setFiles(fetchedFiles);
       setTexts(fetchedTexts);
-    } catch {
-      // silently fail on history fetch
+      return { files: fetchedFiles, texts: fetchedTexts };
+    } catch (err) {
+      if (err.response?.status === 403 || err.response?.status === 404 || err.response?.data?.expired) {
+        setFiles([]);
+        setTexts([]);
+      }
+      throw err;
     }
   }, []);
 

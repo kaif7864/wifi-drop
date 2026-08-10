@@ -3,7 +3,7 @@
  * Customer Folder Grouping Workspace — Hardware Fingerprint Isolated Folders
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileCard } from './FileCard';
 import { TextShare } from './TextShare';
@@ -58,8 +58,10 @@ export function CustomerFolders({
   onTogglePrint,
   sessionId,
   shop,
+  initialCustomerId = null,
+  onSelectCustomer,
 }) {
-  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId);
   const [nicknames, setNicknames] = useState(getNicknames);
   const [editingNickId, setEditingNickId] = useState(null);
   const [nickInput, setNickInput] = useState('');
@@ -157,6 +159,24 @@ export function CustomerFolders({
     return Object.values(groups).sort((a, b) => b.lastActivity - a.lastActivity);
   }, [files, texts]);
 
+  // Auto-select folder if initialCustomerId is passed from Customers tab
+  useEffect(() => {
+    if (initialCustomerId) {
+      const match = customerGroups.find((g) =>
+        g.customerId === initialCustomerId ||
+        g.customerId.toLowerCase() === initialCustomerId.toLowerCase() ||
+        (g.customerName && g.customerName.toLowerCase() === initialCustomerId.toLowerCase()) ||
+        g.files.some((f) => f.customerId === initialCustomerId || f.deviceName === initialCustomerId) ||
+        g.texts.some((t) => t.customerId === initialCustomerId || t.deviceName === initialCustomerId)
+      );
+      if (match) {
+        setSelectedCustomerId(match.customerId);
+      } else {
+        setSelectedCustomerId(initialCustomerId);
+      }
+    }
+  }, [initialCustomerId, customerGroups]);
+
   // Filtered groups calculation based on search and status tabs
   const filteredCustomerGroups = useMemo(() => {
     return customerGroups.filter((g) => {
@@ -192,7 +212,10 @@ export function CustomerFolders({
             <div className="flex items-center gap-3 workspace-title-area">
               <button
                 className="btn btn-ghost btn-sm btn-back-folders"
-                onClick={() => setSelectedCustomerId(null)}
+                onClick={() => {
+                  setSelectedCustomerId(null);
+                  if (onSelectCustomer) onSelectCustomer(null);
+                }}
               >
                 ← Back
               </button>

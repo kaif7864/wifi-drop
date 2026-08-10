@@ -272,7 +272,7 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
                   <button className="btn btn-primary btn-sm" onClick={() => onNavChange('qr_management')}>
                     📱 Generate Temp QR
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => onNavChange('customer_folders')}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => onNavChange('customer_folders', selected.id || selected.name)}>
                     📂 Open Customer Folder
                   </button>
                   <button className="btn btn-secondary btn-sm" onClick={() => onNavChange('billing')}>

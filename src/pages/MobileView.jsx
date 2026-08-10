@@ -62,9 +62,14 @@ export function MobileView() {
   
   const customerFp = useMemo(() => getHardwareFingerprint(), []);
   const effectiveDeviceName = customerFp?.deviceName || deviceName;
-  const effectiveCustomerId = targetCustomerId || customerFp?.customerId;
+  const effectiveCustomerId = targetCustomerId || customerFp?.customerId || 'cust_anonymous';
+  const isViewOnlyParam = useMemo(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get('view') === 'only' || p.get('mode') === 'view';
+  }, []);
+
   const { socket, connected } = useSocket('mobile', effectiveDeviceName, sessionId);
-  const { uploading, uploadProgress, uploadFiles, sendText } = useTransfer();
+  const { files, texts, uploading, uploadProgress, uploadFiles, sendText, fetchHistory } = useTransfer(shopId);
 
   const { peerState, initiateConnect, sendFileP2P } = useWebRTC({
     socket,
@@ -80,10 +85,68 @@ export function MobileView() {
   const [p2pProgress, setP2pProgress] = useState(0);
   const [isP2pUploading, setIsP2pUploading] = useState(false);
   const [textStatus, setTextStatus] = useState(null);
-  const [activeMode, setActiveMode] = useState('file'); // 'file' | 'text'
+  const [activeMode, setActiveMode] = useState(() => (isViewOnlyParam ? 'view' : 'file')); // 'file' | 'text' | 'view'
   const [customerName, setCustomerName] = useState(() => {
     try { return localStorage.getItem('wifidrop_customer_name') || ''; } catch { return ''; }
   });
+
+  const [recentUploads, setRecentUploads] = useState([]);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const isViewPortalSession = Boolean(isViewOnlyParam || (sessionId && sessionId.startsWith('temp_')));
+
+  // Socket listener for live print status updates in recent session uploads
+  useEffect(() => {
+    if (!socket) return;
+    const handlePrintUpdate = (data) => {
+      const targetId = data.fileId || data.id || data.uuid;
+      const status = typeof data.printedStatus === 'boolean' ? data.printedStatus : true;
+      if (targetId) {
+        setRecentUploads((prev) =>
+          prev.map((f) => ((f.uuid === targetId || f.id === targetId || f._id === targetId) ? { ...f, printedStatus: status } : f))
+        );
+      }
+    };
+    const handleRevokeUpdate = (data) => {
+      const cleanCurrent = (sessionId || '').toLowerCase().trim();
+      const revokedId = (data?.qrId || '').toLowerCase().trim();
+      if (!revokedId || revokedId === cleanCurrent) {
+        setSessionExpired(true);
+      }
+    };
+
+    socket.on('file_printed', handlePrintUpdate);
+    socket.on('print_status_updated', handlePrintUpdate);
+    socket.on('session_revoked', handleRevokeUpdate);
+    socket.on('temp_qr_revoked', handleRevokeUpdate);
+
+    return () => {
+      socket.off('file_printed', handlePrintUpdate);
+      socket.off('print_status_updated', handlePrintUpdate);
+      socket.off('session_revoked', handleRevokeUpdate);
+      socket.off('temp_qr_revoked', handleRevokeUpdate);
+    };
+  }, [socket, sessionId]);
+
+  // Fetch session history for customer view ONLY if in valid time-limited view session
+  useEffect(() => {
+    if (isViewPortalSession) {
+      fetchHistory(shopId, sessionId, null, effectiveCustomerId)
+        .catch((err) => {
+          if (err.response?.status === 403 || err.response?.data?.expired) {
+            setSessionExpired(true);
+          }
+        });
+      const interval = setInterval(() => {
+        fetchHistory(shopId, sessionId, null, effectiveCustomerId)
+          .catch((err) => {
+            if (err.response?.status === 403 || err.response?.data?.expired) {
+              setSessionExpired(true);
+            }
+          });
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [shopId, sessionId, effectiveCustomerId, fetchHistory, isViewPortalSession]);
 
   const handleNameChange = (e) => {
     const val = e.target.value;
@@ -197,7 +260,7 @@ export function MobileView() {
 
     // 2. Cloud Inbox & HTTP Upload
     try {
-      await uploadFiles(
+      const uploadRes = await uploadFiles(
         selectedFiles,
         effectiveDeviceName,
         sessionId,
@@ -207,6 +270,9 @@ export function MobileView() {
         customerFp?.customerId,
         fileNotes
       );
+      if (uploadRes?.files && Array.isArray(uploadRes.files)) {
+        setRecentUploads((prev) => [...uploadRes.files, ...prev]);
+      }
       setUploadStatus('success');
       setSelectedFiles([]);
       setFileNotes({});
@@ -351,21 +417,23 @@ export function MobileView() {
         </div>
       </div>
 
-      {/* Mode tabs */}
-      <div className="mobile-tabs">
-        <button
-          className={`mobile-tab ${activeMode === 'file' ? 'mobile-tab-active' : ''}`}
-          onClick={() => setActiveMode('file')}
-        >
-          📁 Files
-        </button>
-        <button
-          className={`mobile-tab ${activeMode === 'text' ? 'mobile-tab-active' : ''}`}
-          onClick={() => setActiveMode('text')}
-        >
-          📝 Text
-        </button>
-      </div>
+      {/* Mode tabs: Hidden in View-Only mode */}
+      {!isViewPortalSession && (
+        <div className="mobile-tabs">
+          <button
+            className={`mobile-tab ${activeMode === 'file' ? 'mobile-tab-active' : ''}`}
+            onClick={() => setActiveMode('file')}
+          >
+            📁 Upload Files
+          </button>
+          <button
+            className={`mobile-tab ${activeMode === 'text' ? 'mobile-tab-active' : ''}`}
+            onClick={() => setActiveMode('text')}
+          >
+            📝 Send Text
+          </button>
+        </div>
+      )}
 
       <div className="mobile-content">
         <AnimatePresence mode="wait">
@@ -571,6 +639,57 @@ export function MobileView() {
               >
                 {isCurrentlyTransferring ? 'Sending...' : `Send ${selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''} →`}
               </button>
+
+              {/* 📦 Recent Uploads in this session on Permanent QR */}
+              {recentUploads.length > 0 && (
+                <div className="recent-uploads-section mt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0F172A' }}>
+                      📦 Your Uploads (This Session)
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>
+                      Live Status
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {recentUploads.map((f, i) => {
+                      const fId = f.uuid || f.id || f._id;
+                      const previewUrl = f.cloudinarySecureUrl || f.previewUrl || (fId ? `${config.serverUrl}/api/files/${fId}/preview` : null);
+                      const isImg = f.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(f.originalName || '');
+                      const isPdf = f.mimeType?.includes('pdf') || (f.originalName || '').toLowerCase().endsWith('.pdf');
+
+                      return (
+                        <div key={fId || i} className="recent-file-card glass-card" style={{ padding: '10px 12px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span>{isImg ? '🖼️' : isPdf ? '📕' : '📄'}</span>
+                              <div className="min-w-0">
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                                  {f.originalName}
+                                </div>
+                                <div style={{ fontSize: '0.68rem', color: '#64748B' }}>
+                                  {f.size ? `${Math.round(f.size / 1024)} KB` : ''}
+                                </div>
+                              </div>
+                            </div>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              background: f.printedStatus ? '#ECFDF5' : '#FFFBEB',
+                              color: f.printedStatus ? '#059669' : '#D97706',
+                              border: `1px solid ${f.printedStatus ? '#A7F3D0' : '#FDE68A'}`,
+                            }}>
+                              {f.printedStatus ? '✓ Printed' : '⏳ In Queue'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -623,6 +742,154 @@ export function MobileView() {
               >
                 Send Text →
               </button>
+            </motion.div>
+          )}
+
+          {/* ── View Only Mode (Strictly Read-Only, No Uploads) ── */}
+          {(isViewPortalSession || activeMode === 'view') && (
+            <motion.div
+              key="view"
+              className="mode-panel view-portal-panel"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.2 }}
+            >
+              {/* Premium Hero Status Header */}
+              <div className="view-portal-hero glass-card">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="view-hero-icon">👁️</div>
+                    <div>
+                      <h3 className="view-hero-title">Customer View Portal</h3>
+                      <p className="view-hero-subtitle">
+                        {shopId && shopId !== 'default' ? `Shop: ${shopId}` : 'Read-Only Document Access'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="live-status-chip">
+                    <span className="live-dot"></span>
+                    <span>Live Synced</span>
+                  </div>
+                </div>
+
+                {/* Live Stats Summary Row */}
+                <div className="view-stats-row flex items-center justify-between mt-3 pt-3">
+                  <div className="view-stat-box">
+                    <span className="stat-num">{files.length}</span>
+                    <span className="stat-label">Files</span>
+                  </div>
+                  <div className="view-stat-divider"></div>
+                  <div className="view-stat-box">
+                    <span className="stat-num printed-color">{files.filter(f => f.printedStatus).length}</span>
+                    <span className="stat-label">Printed ✓</span>
+                  </div>
+                  <div className="view-stat-divider"></div>
+                  <div className="view-stat-box">
+                    <span className="stat-num queue-color">{files.filter(f => !f.printedStatus).length}</span>
+                    <span className="stat-label">In Queue ⏳</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-3 pt-2" style={{ borderTop: '1px solid rgba(226, 232, 240, 0.6)' }}>
+                  <span className="customer-tag-pill">
+                    👤 {customerName || effectiveDeviceName}
+                  </span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#7C3AED', background: '#F3E8FF', padding: '3px 8px', borderRadius: '6px' }}>
+                    🔒 View-Only Mode
+                  </span>
+                </div>
+              </div>
+
+              {/* If Session is Expired */}
+              {sessionExpired ? (
+                <div className="empty-state glass-card" style={{ border: '2px solid #FEE2E2', background: '#FEF2F2' }}>
+                  <div className="empty-state-icon-wrap">⏱️</div>
+                  <h4 className="empty-state-title" style={{ color: '#B91C1C' }}>Access Link Expired</h4>
+                  <p className="empty-state-text" style={{ color: '#7F1D1D' }}>
+                    This time-limited Customer View Link has expired for your privacy and security. Please ask the shopkeeper to generate a new QR code or link.
+                  </p>
+                </div>
+              ) : files.length === 0 && texts.length === 0 ? (
+                <div className="empty-state glass-card">
+                  <div className="empty-state-icon-wrap">📂</div>
+                  <h4 className="empty-state-title">No files transferred yet</h4>
+                  <p className="empty-state-text">
+                    No files found in your designated folder for this session.
+                  </p>
+                </div>
+              ) : (
+                <div className="view-only-list flex flex-col gap-3">
+                  {/* Files List */}
+                  {files.map((f, i) => {
+                    const fId = f.uuid || f.id || f._id;
+                    const previewUrl = f.cloudinarySecureUrl || f.previewUrl || (fId ? `${config.serverUrl}/api/files/${fId}/preview` : null);
+                    const downloadUrl = f.downloadUrl ? `${config.serverUrl}${f.downloadUrl}` : (fId ? `${config.serverUrl}/api/files/${fId}/download` : null);
+                    const isImg = f.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(f.originalName || '');
+                    const isPdf = f.mimeType?.includes('pdf') || (f.originalName || '').toLowerCase().endsWith('.pdf');
+
+                    return (
+                      <div key={fId || i} className="view-file-card glass-card">
+                        <div className="flex items-start gap-3">
+                          <div className="file-type-avatar" style={{
+                            background: isImg ? '#EFF6FF' : isPdf ? '#FEF2F2' : '#F1F5F9',
+                            color: isImg ? '#2563EB' : isPdf ? '#DC2626' : '#475569'
+                          }}>
+                            {isImg ? '🖼️' : isPdf ? '📕' : '📄'}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="view-file-name" title={f.originalName}>
+                              {f.originalName}
+                            </div>
+                            <div className="view-file-meta flex items-center gap-2 mt-1">
+                              <span>{f.size ? (f.size / (1024 * 1024) >= 1 ? `${(f.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`) : ''}</span>
+                              {f.pageCount > 1 && <span>· {f.pageCount} Pages</span>}
+                              {f.copies > 1 && <span>· {f.copies} Copies</span>}
+                            </div>
+                            {f.note && (
+                              <div className="view-file-note">
+                                🔑 Note: {f.note}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="view-file-bottom flex items-center justify-between mt-3 pt-2.5">
+                          <span className={`print-status-tag ${f.printedStatus ? 'printed' : 'queue'}`}>
+                            {f.printedStatus ? '✓ Printed by Shop' : '⏳ In Print Queue'}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            {previewUrl && (
+                              <a href={previewUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs">
+                                👁️ View
+                              </a>
+                            )}
+                            {downloadUrl && (
+                              <a href={downloadUrl} download={f.originalName} className="btn btn-secondary btn-xs">
+                                ⬇️ Download
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Texts List */}
+                  {texts.map((t, i) => (
+                    <div key={t.uuid || t.id || i} className="view-text-card glass-card">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span style={{ fontSize: '1rem' }}>💬</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#475569' }}>Customer Note</span>
+                      </div>
+                      <p style={{ fontSize: '0.82rem', color: '#1E293B', whiteSpace: 'pre-wrap', margin: 0 }}>
+                        {t.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1078,6 +1345,217 @@ export function MobileView() {
           background: var(--danger-glow);
           color: var(--danger);
           border: 1px solid rgba(255,92,92,0.3);
+        }
+
+        /* ── Customer View Portal CSS ── */
+        .view-portal-hero {
+          background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+          border: 1px solid #DBEAFE;
+          border-radius: 20px;
+          padding: 1rem;
+          margin-bottom: 1rem;
+          box-shadow: 0 4px 16px rgba(37, 99, 235, 0.06);
+        }
+
+        .view-hero-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          background: #DBEAFE;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.3rem;
+          flex-shrink: 0;
+        }
+
+        .view-hero-title {
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #0F172A;
+          margin: 0;
+        }
+
+        .view-hero-subtitle {
+          font-size: 0.72rem;
+          color: #64748B;
+          margin: 2px 0 0 0;
+        }
+
+        .live-status-chip {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: #ECFDF5;
+          color: #059669;
+          border: 1px solid #A7F3D0;
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 0.7rem;
+          font-weight: 800;
+        }
+
+        .live-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #10B981;
+          animation: pulseDot 1.5s infinite;
+        }
+
+        @keyframes pulseDot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .view-stats-row {
+          display: flex;
+          align-items: center;
+          background: #ffffff;
+          padding: 8px 12px;
+          border-radius: 12px;
+          border: 1px solid #E2E8F0;
+        }
+
+        .view-stat-box {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+        }
+
+        .stat-num {
+          font-size: 1.1rem;
+          font-weight: 900;
+          color: #0F172A;
+        }
+
+        .stat-num.printed-color { color: #059669; }
+        .stat-num.queue-color { color: #D97706; }
+
+        .stat-label {
+          font-size: 0.68rem;
+          font-weight: 700;
+          color: #64748B;
+        }
+
+        .view-stat-divider {
+          width: 1px;
+          height: 24px;
+          background: #E2E8F0;
+        }
+
+        .customer-tag-pill {
+          font-size: 0.74rem;
+          font-weight: 700;
+          color: #475569;
+          background: #F1F5F9;
+          padding: 3px 10px;
+          border-radius: 8px;
+        }
+
+        .view-file-card {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 16px;
+          padding: 14px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .view-file-card:hover {
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .file-type-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.4rem;
+          flex-shrink: 0;
+        }
+
+        .view-file-name {
+          font-size: 0.88rem;
+          font-weight: 800;
+          color: #0F172A;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .view-file-meta {
+          font-size: 0.72rem;
+          color: #64748B;
+          font-weight: 600;
+        }
+
+        .view-file-note {
+          font-size: 0.72rem;
+          color: #4F46E5;
+          background: #EEF2FF;
+          padding: 3px 8px;
+          border-radius: 6px;
+          margin-top: 6px;
+          display: inline-block;
+          font-weight: 600;
+        }
+
+        .print-status-tag {
+          font-size: 0.72rem;
+          font-weight: 800;
+          padding: 4px 10px;
+          border-radius: 8px;
+        }
+
+        .print-status-tag.printed {
+          background: #ECFDF5;
+          color: #059669;
+          border: 1px solid #A7F3D0;
+        }
+
+        .print-status-tag.queue {
+          background: #FFFBEB;
+          color: #D97706;
+          border: 1px solid #FDE68A;
+        }
+
+        .view-text-card {
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 14px;
+          padding: 12px 14px;
+        }
+
+        .empty-state {
+          padding: 2.5rem 1.5rem;
+          text-align: center;
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 20px;
+        }
+
+        .empty-state-icon-wrap {
+          font-size: 3rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .empty-state-title {
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #0F172A;
+          margin: 0;
+        }
+
+        .empty-state-text {
+          font-size: 0.78rem;
+          color: #64748B;
+          margin: 6px 0 16px 0;
+          line-height: 1.5;
         }
       `}</style>
     </div>

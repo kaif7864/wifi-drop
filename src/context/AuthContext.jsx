@@ -107,7 +107,6 @@ export function AuthProvider({ children }) {
         if (error.response?.status === 401) {
           const currentToken = localStorage.getItem('wifidrop_token');
           if (currentToken) {
-            console.warn('[AuthContext] 401 detected — logging out.');
             logout('expired');
           }
         }
@@ -127,7 +126,6 @@ export function AuthProvider({ children }) {
 
       // Client-side pre-check before hitting server
       if (isTokenExpired(token)) {
-        console.warn('[AuthContext] Stored token expired on startup. Clearing.');
         setToken(null);
         setShop(null);
         localStorage.removeItem('wifidrop_shop');
@@ -163,7 +161,6 @@ export function AuthProvider({ children }) {
     if (!token) return;
     const interval = setInterval(() => {
       if (isTokenExpired(token)) {
-        console.warn('[AuthContext] Token expired mid-session. Logging out.');
         logout('expired');
       }
     }, 5 * 60 * 1000);

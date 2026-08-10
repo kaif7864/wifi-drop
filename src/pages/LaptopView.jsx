@@ -3,7 +3,7 @@
  * Laptop / Desktop Dashboard View — Multi-Page SaaS Transfer Hub with Complete Mobile Responsiveness
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
@@ -70,28 +70,56 @@ export function LaptopView() {
   const [connectedDevice] = useState(null);
   const [activeNav, setActiveNav] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [selectedFolderCustomerId, setSelectedFolderCustomerId] = useState(null);
 
   // Derived shop/session identifiers — defined early so all hooks can access them
   const guestSessionId = useMemo(() => getOrCreateSessionId(), []);
   const activeShopId = shop?.shopId || null;
   const targetSessionId = activeShopId ? null : guestSessionId;
 
+  // Track recent toast IDs to avoid duplicate toasts
+  const recentToastIdsRef = useRef(new Map());
+
   const addToast = useCallback((toast) => {
+    const dedupeKey = toast.dedupeKey || toast.file?.uuid || toast.file?.id || toast.file?._id || toast.title;
+    if (dedupeKey) {
+      const lastTime = recentToastIdsRef.current.get(dedupeKey);
+      if (lastTime && Date.now() - lastTime < 6000) {
+        return; // Skip duplicate within 6 seconds
+      }
+      recentToastIdsRef.current.set(dedupeKey, Date.now());
+    }
     const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, ...toast }]);
+    setToasts((prev) => {
+      if (toast.file) {
+        const fid = toast.file.uuid || toast.file.id || toast.file._id;
+        if (fid && prev.some((t) => (t.file?.uuid || t.file?.id || t.file?._id) === fid)) {
+          return prev;
+        }
+      }
+      return [...prev, { id, ...toast }];
+    });
   }, []);
 
   const dismiss = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const handleLogout = useCallback(() => {
+    setToasts([]);
+    recentToastIdsRef.current.clear();
+    logout();
+  }, [logout]);
+
   // Listen for real-time socket events
   useEffect(() => {
     if (!socket) return;
 
     const handleFileReceived = (fileData) => {
+      const fileId = fileData.uuid || fileData.id || fileData._id;
       addReceivedFile(fileData);
       addToast({
+        dedupeKey: `file_${fileId || fileData.originalName}`,
         type: 'file',
         title: `📥 ${fileData.originalName}`,
         message: `${fileData.deviceName || 'Mobile'} transferred a file`,
@@ -102,8 +130,10 @@ export function LaptopView() {
     };
 
     const handleTextReceived = (textData) => {
+      const textId = textData.uuid || textData.id || textData._id;
       addReceivedText(textData);
       addToast({
+        dedupeKey: `text_${textId || textData.text?.slice(0, 20)}`,
         type: 'text',
         title: `💬 Note from ${textData.deviceName || 'Mobile'}`,
         message: textData.text?.slice(0, 60),
@@ -123,6 +153,7 @@ export function LaptopView() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('all');
+  const [historyFilter, setHistoryFilter] = useState('all');
   const [qrUrl, setQrUrl] = useState('');
   const [lang, setLang] = useState(() => localStorage.getItem('wifidrop_lang') || 'en');
 
@@ -169,9 +200,15 @@ export function LaptopView() {
 
       if (!matchesSearch) return false;
       if (fileFilter === 'all') return true;
-      if (fileFilter === 'images') return file.mimeType?.startsWith('image/');
-      if (fileFilter === 'documents') return file.mimeType?.includes('pdf') || file.mimeType?.includes('word') || file.mimeType?.includes('document') || file.mimeType?.includes('sheet');
-      if (fileFilter === 'media') return file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/');
+
+      const mime = (file.mimeType || '').toLowerCase();
+      const isImg = mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|ico|heic)$/i.test(name);
+      const isDoc = mime.includes('pdf') || mime.includes('word') || mime.includes('document') || mime.includes('sheet') || mime.includes('text') || /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf|csv)$/i.test(name);
+      const isMedia = mime.startsWith('video/') || mime.startsWith('audio/') || /\.(mp4|mp3|mkv|mov|avi|wav|aac|m4a|webm)$/i.test(name);
+
+      if (fileFilter === 'image' || fileFilter === 'images') return isImg;
+      if (fileFilter === 'doc' || fileFilter === 'docc' || fileFilter === 'documents') return isDoc;
+      if (fileFilter === 'media') return isMedia;
       return true;
     });
   }, [files, searchQuery, fileFilter]);
@@ -202,15 +239,32 @@ export function LaptopView() {
 
   // Filtered combined timeline items
   const filteredHistory = useMemo(() => {
-    if (!searchQuery) return combinedHistory;
-    const q = searchQuery.toLowerCase();
     return combinedHistory.filter((item) => {
+      const isFile = item._type === 'file' || item.itemType === 'file' || Boolean(item.originalName || item.size);
       const name = (item.originalName || item.originalname || item.name || item.text || '').toLowerCase();
       const devName = (item.deviceName || '').toLowerCase();
       const custName = (item.customerName || '').toLowerCase();
-      return name.includes(q) || devName.includes(q) || custName.includes(q);
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !searchQuery || name.includes(q) || devName.includes(q) || custName.includes(q);
+
+      if (!matchesSearch) return false;
+      if (historyFilter === 'all') return true;
+      if (historyFilter === 'texts' || historyFilter === 'text') return !isFile;
+      if (historyFilter === 'files') return isFile;
+
+      if (isFile) {
+        const mime = (item.mimeType || '').toLowerCase();
+        const isImg = mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|ico|heic)$/i.test(name);
+        const isDoc = mime.includes('pdf') || mime.includes('word') || mime.includes('document') || mime.includes('sheet') || mime.includes('text') || /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf|csv)$/i.test(name);
+        const isMedia = mime.startsWith('video/') || mime.startsWith('audio/') || /\.(mp4|mp3|mkv|mov|avi|wav|aac|m4a|webm)$/i.test(name);
+
+        if (historyFilter === 'image' || historyFilter === 'images') return isImg;
+        if (historyFilter === 'doc' || historyFilter === 'docc' || historyFilter === 'documents') return isDoc;
+        if (historyFilter === 'media') return isMedia;
+      }
+      return true;
     });
-  }, [combinedHistory, searchQuery]);
+  }, [combinedHistory, searchQuery, historyFilter]);
 
   // Unprinted files count
   const unprintedCount = useMemo(() => {
@@ -300,7 +354,7 @@ export function LaptopView() {
               {shop ? (
                 <div className="shop-badge flex items-center gap-1">
                   <span className="shop-name">🏪 {shop.shopName}</span>
-                  <button className="btn btn-ghost btn-xs logout-btn" onClick={logout}>Logout</button>
+                  <button className="btn btn-ghost btn-xs logout-btn" onClick={handleLogout}>Logout</button>
                 </div>
               ) : (
                 <div className="auth-actions flex items-center gap-1">
@@ -352,6 +406,8 @@ export function LaptopView() {
                 onTogglePrint={togglePrintStatus}
                 sessionId={sessionId}
                 shop={shop}
+                initialCustomerId={selectedFolderCustomerId}
+                onSelectCustomer={setSelectedFolderCustomerId}
               />
             )}
 
@@ -399,8 +455,7 @@ export function LaptopView() {
               <PrintPage
                 files={files}
                 onTogglePrint={togglePrintStatus}
-                onDeleteFile={handleDeleteFile}
-                shopId={shop?.shopId}
+                onDelete={handleDeleteFile}
                 shop={shop}
               />
             )}
@@ -420,7 +475,12 @@ export function LaptopView() {
               <CustomersPage
                 files={files}
                 texts={texts}
-                onNavChange={setActiveNav}
+                onNavChange={(nav, targetCustId) => {
+                  if (targetCustId) {
+                    setSelectedFolderCustomerId(targetCustId);
+                  }
+                  setActiveNav(nav);
+                }}
                 shop={shop}
               />
             )}
@@ -445,13 +505,16 @@ export function LaptopView() {
 
             {/* ── 9. FULL HISTORY ── */}
             {activeNav === 'history' && (
-              <TimelineHistory
-                items={filteredHistory}
-                combinedHistory={filteredHistory}
-                onDeleteFile={handleDeleteFile}
-                onDeleteText={handleDeleteText}
-                onTogglePrint={togglePrintStatus}
-              />
+              <>
+                <CategoryFilter currentFilter={historyFilter} onFilterChange={setHistoryFilter} />
+                <TimelineHistory
+                  items={filteredHistory}
+                  combinedHistory={filteredHistory}
+                  onDeleteFile={handleDeleteFile}
+                  onDeleteText={handleDeleteText}
+                  onTogglePrint={togglePrintStatus}
+                />
+              </>
             )}
 
             {/* ── 10. COUNTER STANDEE ── */}

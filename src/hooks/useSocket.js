@@ -53,7 +53,11 @@ export function useSocket(role, deviceName = 'Browser', sessionId = null) {
     });
 
     return () => {
-      socket.disconnect();
+      if (socket) {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.disconnect();
+      }
     };
   }, []);
 
