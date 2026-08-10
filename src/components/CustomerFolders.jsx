@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FileCard } from './FileCard';
 import { TextShare } from './TextShare';
 import { QRModal } from './QRModal';
+import { ConfirmDeleteFolderModal } from './ConfirmDeleteFolderModal';
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
@@ -63,11 +64,13 @@ export function CustomerFolders({
 }) {
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId);
   const [nicknames, setNicknames] = useState(getNicknames);
-  const [editingNickId, setEditingNickId] = useState(null);
+  const [editingGroup, setEditingGroup] = useState(null);
   const [nickInput, setNickInput] = useState('');
   const [folderFilter, setFolderFilter] = useState('all'); // 'all' | 'unprinted' | 'printed'
   const [searchQuery, setSearchQuery] = useState('');
   const [qrModalGroup, setQrModalGroup] = useState(null);
+  const [deleteConfirmGroup, setDeleteConfirmGroup] = useState(null);
+  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
 
   const handleSaveNickname = (custId) => {
     try {
@@ -79,17 +82,26 @@ export function CustomerFolders({
       }
       localStorage.setItem('wifidrop_customer_nicknames', JSON.stringify(updated));
       setNicknames(updated);
-      setEditingNickId(null);
+      setEditingGroup(null);
       setNickInput('');
     } catch (e) {
       console.warn('[Nickname Error]:', e);
     }
   };
 
-  const handleDeleteCurrentFolder = async (custId) => {
-    if (window.confirm('Are you sure you want to delete this customer folder and all its files?')) {
-      if (onDeleteFolder) await onDeleteFolder(custId);
-      setSelectedCustomerId(null);
+  const handleConfirmPermanentDelete = async () => {
+    if (!deleteConfirmGroup) return;
+    try {
+      setIsDeletingFolder(true);
+      if (onDeleteFolder) await onDeleteFolder(deleteConfirmGroup.customerId);
+      if (selectedCustomerId === deleteConfirmGroup.customerId) {
+        setSelectedCustomerId(null);
+      }
+      setDeleteConfirmGroup(null);
+    } catch (e) {
+      console.error('[Delete Folder Error]:', e);
+    } finally {
+      setIsDeletingFolder(false);
     }
   };
 
@@ -209,42 +221,50 @@ export function CustomerFolders({
         /* ── SINGLE CUSTOMER FOLDER WORKSPACE VIEW ── */
         <div className="customer-workspace">
           <div className="workspace-header flex items-center justify-between">
-            <div className="flex items-center gap-3 workspace-title-area">
+            <div className="flex items-center gap-3.5 workspace-title-area">
               <button
-                className="btn btn-ghost btn-sm btn-back-folders"
+                className="btn-back-circle"
                 onClick={() => {
                   setSelectedCustomerId(null);
                   if (onSelectCustomer) onSelectCustomer(null);
                 }}
+                title="Back to All Folders"
               >
-                ← Back
+                ←
               </button>
               <div className="min-w-0">
-                <h3 className="workspace-title flex items-center gap-2">
-                  📁 {nicknames[activeGroup.customerId] ? (
-                    <>
-                      <span>{nicknames[activeGroup.customerId]}</span>
-                      <span style={{ fontSize: '0.8rem', opacity: 0.7, fontWeight: 400 }}>
-                        ({activeGroup.customerName || activeGroup.deviceName})
-                      </span>
-                    </>
-                  ) : (
-                    <span>{activeGroup.customerName || activeGroup.deviceName}</span>
-                  )}
+                <div className="flex items-center gap-2">
+                  <span className="workspace-folder-icon">📁</span>
+                  <h3 className="workspace-title">
+                    {nicknames[activeGroup.customerId] ? (
+                      <>
+                        <span>{nicknames[activeGroup.customerId]}</span>
+                        <span className="workspace-original-name">
+                          ({activeGroup.customerName || activeGroup.deviceName})
+                        </span>
+                      </>
+                    ) : (
+                      <span>{activeGroup.customerName || activeGroup.deviceName}</span>
+                    )}
+                  </h3>
                   <button
-                    className="btn btn-ghost btn-xs text-xs"
+                    className="btn-rename-subtle"
                     onClick={() => {
-                      setEditingNickId(activeGroup.customerId);
+                      setEditingGroup(activeGroup);
                       setNickInput(nicknames[activeGroup.customerId] || '');
                     }}
-                    title="Add or Edit Shopkeeper Nickname"
+                    title="Rename / Edit Nickname"
                   >
-                    ✏️ Edit
+                    ✏️
                   </button>
-                </h3>
-                <span className="workspace-sub">
-                  {activeGroup.files.length} Files · {activeGroup.texts.length} Notes · ID: {activeGroup.customerId}
-                </span>
+                </div>
+                <div className="workspace-meta-row flex items-center gap-2 mt-1">
+                  <span className="workspace-meta-badge">📄 {activeGroup.files.length} Files</span>
+                  <span className="meta-dot">·</span>
+                  <span className="workspace-meta-badge">💬 {activeGroup.texts.length} Notes</span>
+                  <span className="meta-dot">·</span>
+                  <span className="workspace-id-chip">ID: {activeGroup.customerId}</span>
+                </div>
               </div>
             </div>
 
@@ -264,37 +284,19 @@ export function CustomerFolders({
                       if (!f.printedStatus) onTogglePrint(f);
                     });
                   }}
+                  title="Mark all files in this customer folder as printed"
                 >
-                  ✓ Mark Printed
+                  ✓ Mark All Printed
                 </button>
               )}
               <button
                 className="btn btn-danger btn-sm"
-                onClick={() => handleDeleteCurrentFolder(activeGroup.customerId)}
+                onClick={() => setDeleteConfirmGroup(activeGroup)}
               >
                 🗑️ Delete
               </button>
             </div>
           </div>
-
-          {editingNickId === activeGroup.customerId && (
-            <div className="glass-card p-3 my-3 flex items-center gap-2" style={{ maxWidth: '500px' }}>
-              <input
-                type="text"
-                className="input input-sm flex-1"
-                placeholder="Enter shopkeeper nickname (e.g. Ramesh - Passport Size)..."
-                value={nickInput}
-                onChange={(e) => setNickInput(e.target.value)}
-                autoFocus
-              />
-              <button className="btn btn-primary btn-sm" onClick={() => handleSaveNickname(activeGroup.customerId)}>
-                Save
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditingNickId(null)}>
-                Cancel
-              </button>
-            </div>
-          )}
 
           <div className="workspace-section">
             <h4 className="section-heading">Received Documents & Files ({activeGroup.files.length})</h4>
@@ -400,6 +402,21 @@ export function CustomerFolders({
                             {group.unprintedCount} New
                           </span>
                         )}
+                        {group.unprintedCount > 0 && onTogglePrint && (
+                          <button
+                            className="btn-icon"
+                            style={{ color: '#059669', borderColor: '#A7F3D0', background: '#ECFDF5' }}
+                            title={`Mark all ${group.unprintedCount} files in this folder as printed`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              group.files.forEach((f) => {
+                                if (!f.printedStatus) onTogglePrint(f);
+                              });
+                            }}
+                          >
+                            🖨️
+                          </button>
+                        )}
                         <button
                           className="btn-icon"
                           title="Share QR for this Customer Folder"
@@ -412,10 +429,10 @@ export function CustomerFolders({
                         </button>
                         <button
                           className="btn-icon btn-secondary-icon"
-                          title="Add / Edit Nickname"
+                          title="Rename Customer Folder"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingNickId(group.customerId);
+                            setEditingGroup(group);
                             setNickInput(nicknames[group.customerId] || '');
                           }}
                         >
@@ -426,7 +443,7 @@ export function CustomerFolders({
                           title="Delete Customer Folder"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteCurrentFolder(group.customerId);
+                            setDeleteConfirmGroup(group);
                           }}
                         >
                           🗑️
@@ -435,42 +452,20 @@ export function CustomerFolders({
                     </div>
 
                     <div className="folder-info">
-                      {editingNickId === group.customerId ? (
-                        <div className="flex items-center gap-1 my-1" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            className="input input-xs flex-1"
-                            placeholder="Shopkeeper Nickname..."
-                            value={nickInput}
-                            onChange={(e) => setNickInput(e.target.value)}
-                            autoFocus
-                          />
-                          <button
-                            className="btn btn-primary btn-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSaveNickname(group.customerId);
-                            }}
-                          >
-                            Save
-                          </button>
-                        </div>
-                      ) : (
-                        <h3 className="folder-name">
-                          {nicknames[group.customerId] ? (
-                            <>
-                              <span style={{ color: 'var(--accent-color, #6366f1)' }}>
-                                🏷️ {nicknames[group.customerId]}
-                              </span>{' '}
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>
-                                ({group.customerName || group.deviceName})
-                              </span>
-                            </>
-                          ) : (
-                            group.customerName || group.deviceName
-                          )}
-                        </h3>
-                      )}
+                      <h3 className="folder-name">
+                        {nicknames[group.customerId] ? (
+                          <>
+                            <span style={{ color: 'var(--accent-color, #6366f1)' }}>
+                              🏷️ {nicknames[group.customerId]}
+                            </span>{' '}
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                              ({group.customerName || group.deviceName})
+                            </span>
+                          </>
+                        ) : (
+                          group.customerName || group.deviceName
+                        )}
+                      </h3>
                       <p className="folder-meta">
                         {group.files.length} Files ({formatBytes(totalSize)})
                       </p>
@@ -488,16 +483,89 @@ export function CustomerFolders({
         </div>
       )}
 
-      {/* Specific Customer Folder QR Share Modal */}
+      {/* Specific Customer Folder QR Modal */}
       {qrModalGroup && (
         <QRModal
-          isOpen={!!qrModalGroup}
+          isOpen={Boolean(qrModalGroup)}
           onClose={() => setQrModalGroup(null)}
-          sessionId={sessionId}
-          shopName={nicknames[qrModalGroup.customerId] || qrModalGroup.customerName || qrModalGroup.deviceName}
-          shopId={shop?.shopId}
           customerId={qrModalGroup.customerId}
+          customerName={qrModalGroup.customerName}
+          deviceName={qrModalGroup.deviceName}
+          shopId={shop?.shopId || 'default'}
+          shopName={shop?.shopName || 'WiFi Drop'}
         />
+      )}
+
+      {/* Permanent Delete Confirmation Modal with Never Restore Warning */}
+      {deleteConfirmGroup && (
+        <ConfirmDeleteFolderModal
+          group={deleteConfirmGroup}
+          onConfirm={handleConfirmPermanentDelete}
+          onCancel={() => setDeleteConfirmGroup(null)}
+          isDeleting={isDeletingFolder}
+        />
+      )}
+
+      {/* Dedicated Rename Customer Folder Modal */}
+      {editingGroup && (
+        <div className="rename-modal-overlay" onClick={() => setEditingGroup(null)}>
+          <motion.div
+            className="rename-modal"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            transition={{ duration: 0.18 }}
+          >
+            <div className="rename-modal-header">
+              <div className="rename-icon-badge">🏷️</div>
+              <div>
+                <h3 className="rename-modal-title">Rename Customer Folder</h3>
+                <p className="rename-modal-sub">
+                  Device: {editingGroup.customerName || editingGroup.deviceName || editingGroup.customerId}
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveNickname(editingGroup.customerId);
+              }}
+            >
+              <div className="rename-modal-body">
+                <label className="rename-input-label">Folder Name / Nickname</label>
+                <input
+                  type="text"
+                  className="input rename-text-input"
+                  placeholder="e.g. Ramesh - Passport Size Photo, urgent..."
+                  value={nickInput}
+                  onChange={(e) => setNickInput(e.target.value)}
+                  autoFocus
+                />
+                <p className="rename-input-hint">
+                  💡 Tip: Leave empty to reset to default customer device name.
+                </p>
+              </div>
+
+              <div className="rename-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost rename-btn"
+                  onClick={() => setEditingGroup(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary rename-btn"
+                >
+                  💾 Save Name
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
       )}
 
       <style>{`
@@ -621,20 +689,98 @@ export function CustomerFolders({
         }
 
         .workspace-header {
-          margin-bottom: var(--space-6);
+          margin-bottom: var(--space-5);
           padding-bottom: var(--space-4);
           border-bottom: 1px solid var(--border);
         }
 
-        .workspace-title {
-          font-size: var(--font-size-lg);
-          font-weight: 800;
-          color: var(--text-primary);
+        .btn-back-circle {
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
+          border: 1px solid #E2E8F0;
+          background: #FFFFFF;
+          color: #334155;
+          font-size: 1.1rem;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
         }
 
-        .workspace-sub {
-          font-size: var(--font-size-xs);
+        .btn-back-circle:hover {
+          background: #F1F5F9;
+          border-color: #CBD5E1;
+          color: #0F172A;
+          transform: translateX(-2px);
+        }
+
+        .workspace-folder-icon {
+          font-size: 1.4rem;
+          line-height: 1;
+        }
+
+        .workspace-title {
+          font-size: 1.2rem;
+          font-weight: 800;
+          color: var(--text-primary);
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .workspace-original-name {
+          font-size: 0.82rem;
+          font-weight: 500;
+          color: #64748B;
+          margin-left: 6px;
+        }
+
+        .btn-rename-subtle {
+          width: 28px;
+          height: 28px;
+          border-radius: 8px;
+          border: 1px solid transparent;
+          background: transparent;
+          font-size: 0.85rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          opacity: 0.75;
+        }
+
+        .btn-rename-subtle:hover {
+          opacity: 1;
+          background: #EEF2FF;
+          border-color: #C7D2FE;
+          transform: scale(1.1);
+        }
+
+        .workspace-meta-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 0.74rem;
           color: var(--text-muted);
+        }
+
+        .workspace-meta-badge {
+          font-weight: 700;
+          color: #475569;
+        }
+
+        .workspace-id-chip {
+          background: #F1F5F9;
+          padding: 2px 7px;
+          border-radius: 6px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          color: #64748B;
         }
 
         .workspace-section {
@@ -756,6 +902,138 @@ export function CustomerFolders({
           .btn-back-folders {
             padding: 4px 8px;
             font-size: 11px;
+          }
+
+          .btn-folder-qr {
+            width: 100%;
+          }
+        }
+
+        /* ── Dedicated Rename Modal Styling ── */
+        .rename-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.65);
+          backdrop-filter: blur(6px);
+          z-index: 99999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1rem;
+        }
+
+        .rename-modal {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 20px;
+          max-width: 440px;
+          width: 100%;
+          padding: 1.5rem;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+        }
+
+        .rename-modal-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .rename-icon-badge {
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          background: #EEF2FF;
+          border: 1px solid #C7D2FE;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.4rem;
+          flex-shrink: 0;
+        }
+
+        .rename-modal-title {
+          font-size: 1.1rem;
+          font-weight: 800;
+          color: #0F172A;
+          margin: 0;
+        }
+
+        .rename-modal-sub {
+          font-size: 0.76rem;
+          color: #64748B;
+          margin: 2px 0 0 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 320px;
+        }
+
+        .rename-modal-body {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .rename-input-label {
+          font-size: 0.8rem;
+          font-weight: 700;
+          color: #334155;
+        }
+
+        .rename-text-input {
+          height: 44px;
+          font-size: 0.92rem;
+          font-weight: 600;
+          border-radius: 12px;
+          padding: 0 14px;
+          border: 1.5px solid #CBD5E1;
+          transition: all 0.15s ease;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .rename-text-input:focus {
+          border-color: #4F46E5;
+          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+        }
+
+        .rename-input-hint {
+          font-size: 0.72rem;
+          color: #64748B;
+          margin: 4px 0 0 0;
+        }
+
+        .rename-modal-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 10px;
+          margin-top: 1.25rem;
+        }
+
+        .rename-btn {
+          padding: 9px 18px !important;
+          font-size: 0.86rem !important;
+          font-weight: 700 !important;
+          border-radius: 10px !important;
+        }
+
+        @media (max-width: 480px) {
+          .rename-modal {
+            padding: 1.25rem;
+          }
+
+          .rename-modal-actions {
+            flex-direction: column-reverse;
+            width: 100%;
+          }
+
+          .rename-btn {
+            width: 100%;
+            justify-content: center;
           }
         }
       `}</style>

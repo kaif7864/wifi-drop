@@ -20,10 +20,34 @@ function formatBytes(bytes) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-function formatTime(isoString) {
+function formatDateTime(isoString) {
   if (!isoString) return '';
   const date = new Date(isoString);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (isToday) {
+    return `Today, ${timeStr}`;
+  }
+  if (isYesterday) {
+    return `Yesterday, ${timeStr}`;
+  }
+
+  const dateStr = date.toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+    ...(date.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+
+  return `${dateStr}, ${timeStr}`;
 }
 
 function getFileIcon(mimeType = '') {
@@ -185,7 +209,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                 </>
               )}
               <span className="meta-dot">·</span>
-              <span>{formatTime(file.savedAt)}</span>
+              <span className="file-timestamp-tag">🕒 {formatDateTime(file.savedAt || file.uploadedAt || file.createdAt)}</span>
               {file.deviceName && (
                 <>
                   <span className="meta-dot">·</span>
@@ -207,52 +231,57 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
 
         {/* Right: actions */}
         <div className="file-actions">
-          <button
-            className={`btn-print-toggle ${addedToBill ? 'printed' : ''}`}
-            style={{ background: addedToBill ? '#ECFDF5' : '#EEF2FF', color: addedToBill ? '#059669' : '#4F46E5', border: '1px solid #C7D2FE' }}
-            title="Add File to Customer Bill Queue"
-            onClick={handleAddToBill}
-          >
-            {addedToBill ? '✓ Added to Bill' : '💳 Add to Bill'}
-          </button>
-          <button
-            className={`btn-print-toggle ${isPrinted ? 'printed' : ''}`}
-            title="Toggle Printed Status"
-            onClick={togglePrint}
-          >
-            {isPrinted ? '✓ Printed' : '🖨️ Mark Printed'}
-          </button>
-          {canPreview && (
+          <div className="file-pill-actions">
+            <button
+              className={`btn-print-toggle ${addedToBill ? 'printed' : ''}`}
+              style={{ background: addedToBill ? '#ECFDF5' : '#EEF2FF', color: addedToBill ? '#059669' : '#4F46E5', border: '1px solid #C7D2FE' }}
+              title="Add File to Customer Bill Queue"
+              onClick={handleAddToBill}
+            >
+              {addedToBill ? '✓ Bill' : '💳 Add to Bill'}
+            </button>
+            <button
+              className={`btn-print-toggle ${isPrinted ? 'printed' : ''}`}
+              title="Toggle Printed Status"
+              onClick={togglePrint}
+            >
+              {isPrinted ? '✓ Printed' : '🖨️ Print'}
+            </button>
+          </div>
+
+          <div className="file-icon-actions">
+            {canPreview && (
+              <button
+                className="btn-icon"
+                title="Quick Preview"
+                onClick={() => setShowPreview(true)}
+              >
+                👁️
+              </button>
+            )}
             <button
               className="btn-icon"
-              title="Quick Preview"
-              onClick={() => setShowPreview(true)}
+              title="Open in new tab"
+              onClick={handleOpenInNewTab}
             >
-              👁️
+              ↗️
             </button>
-          )}
-          <button
-            className="btn-icon"
-            title="Open in new tab"
-            onClick={handleOpenInNewTab}
-          >
-            ↗️
-          </button>
-          <button
-            className="btn-icon"
-            title="Download file"
-            onClick={handleDownload}
-            disabled={isDownloading}
-          >
-            {isDownloading ? '⏳' : '⬇️'}
-          </button>
-          <button
-            className="btn-icon btn-danger-icon"
-            title="Delete file"
-            onClick={() => onDelete(file.uuid || file.id || file._id)}
-          >
-            🗑️
-          </button>
+            <button
+              className="btn-icon"
+              title="Download file"
+              onClick={handleDownload}
+              disabled={isDownloading}
+            >
+              {isDownloading ? '⏳' : '⬇️'}
+            </button>
+            <button
+              className="btn-icon btn-danger-icon"
+              title="Delete file"
+              onClick={() => onDelete(file.uuid || file.id || file._id)}
+            >
+              🗑️
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -349,6 +378,19 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           gap: var(--space-2);
           flex-shrink: 0;
         }
+
+        .file-pill-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .file-icon-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
         .btn-danger-icon:hover {
           color: var(--danger) !important;
           border-color: rgba(239, 68, 68, 0.4) !important;
@@ -434,24 +476,54 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           .file-card {
             flex-direction: column;
             align-items: stretch;
-            gap: 0.75rem;
-            padding: 1rem;
+            gap: 0.65rem;
+            padding: 0.85rem 1rem;
           }
 
           .file-actions {
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: row;
+            flex-wrap: nowrap;
             align-items: center;
-            justify-content: flex-start;
-            gap: 6px;
+            justify-content: space-between;
+            gap: 4px;
             padding-top: 8px;
             border-top: 1px solid var(--border);
             width: 100%;
+            box-sizing: border-box;
+          }
+
+          .file-pill-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+          }
+
+          .file-icon-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
           }
 
           .file-actions .btn-print-toggle {
-            padding: 5px 10px;
+            padding: 5px 8px;
             font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+
+          .file-actions .btn-icon {
+            width: 30px;
+            height: 30px;
+            min-width: 30px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            border-radius: 8px;
           }
 
           .preview-overlay {

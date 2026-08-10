@@ -441,17 +441,20 @@ a:hover { color: var(--accent-secondary); }
   }
 
   .toast-container {
-    top: var(--space-3);
-    right: var(--space-3);
-    left: var(--space-3);
-    align-items: stretch;
+    top: 14px;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    width: calc(100vw - 24px) !important;
+    max-width: 420px !important;
+    align-items: center;
   }
 
-  .toast {
-    min-width: 0;
-    max-width: 100%;
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
+  .toast-pill {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .empty-state {

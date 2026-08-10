@@ -172,68 +172,120 @@ export function PrintPage({ files, onTogglePrint, shop }) {
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>All files have been printed.</p>
               </div>
             ) : (
-              <div className="print-table-wrapper">
-                <table className="print-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>File</th>
-                      <th>Customer</th>
-                      <th>Size</th>
-                      <th>Received</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredQueue.map((file, i) => (
-                      <tr key={file.uuid || file.id || i}>
-                        <td className="row-num">{i + 1}</td>
-                        <td>
-                          <div className="file-cell">
-                            <span className="file-type-icon">{getMimeIcon(file.mimeType)}</span>
-                            <div>
-                              <div className="file-name">{file.originalName}</div>
-                              <div className="file-type-badge">{file.mimeType?.split('/')[1]?.toUpperCase() || 'FILE'}</div>
+              <>
+                {/* Desktop Table View (>768px) */}
+                <div className="print-table-wrapper print-desktop-only">
+                  <table className="print-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>File</th>
+                        <th>Customer</th>
+                        <th>Size</th>
+                        <th>Received</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredQueue.map((file, i) => (
+                        <tr key={file.uuid || file.id || i}>
+                          <td className="row-num">{i + 1}</td>
+                          <td>
+                            <div className="file-cell">
+                              <span className="file-type-icon">{getMimeIcon(file.mimeType)}</span>
+                              <div>
+                                <div className="file-name">{file.originalName}</div>
+                                <div className="file-type-badge">{file.mimeType?.split('/')[1]?.toUpperCase() || 'FILE'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="cust-cell">
+                              <div className="cust-name">{file.customerName || 'Anonymous'}</div>
+                              <div className="cust-device">{file.deviceName}</div>
+                            </div>
+                          </td>
+                          <td><span className="size-tag">{formatBytes(file.size)}</span></td>
+                          <td><span className="time-tag">{timeAgo(file.savedAt || file.createdAt)}</span></td>
+                          <td>
+                            <div className="action-btns">
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                title="Preview file in modal"
+                                onClick={() => setPreviewFile(file)}
+                              >
+                                👁️ View
+                              </button>
+                              <button
+                                className={`btn btn-xs ${isFileInBill(file.uuid || file.id || file._id) ? 'btn-success' : 'btn-secondary'}`}
+                                title="Toggle Customer Bill Queue"
+                                onClick={() => toggleFileInBill(file)}
+                              >
+                                {isFileInBill(file.uuid || file.id || file._id) ? '✓ Billed' : '💳 Bill'}
+                              </button>
+                              <button
+                                className="btn btn-primary btn-xs"
+                                onClick={() => onTogglePrint && onTogglePrint(file)}
+                              >
+                                🖨️ Mark Printed
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card List View (<=768px) */}
+                <div className="print-mobile-list">
+                  {filteredQueue.map((file, i) => {
+                    const isBilled = isFileInBill(file.uuid || file.id || file._id);
+                    return (
+                      <div key={file.uuid || file.id || i} className="print-mobile-card">
+                        <div className="pm-card-top">
+                          <div className="pm-file-info">
+                            <span className="pm-icon">{getMimeIcon(file.mimeType)}</span>
+                            <div className="pm-details">
+                              <p className="pm-name" title={file.originalName}>{file.originalName}</p>
+                              <p className="pm-meta">
+                                <span>{formatBytes(file.size)}</span>
+                                {file.pageCount && file.pageCount > 1 && (
+                                  <span className="pm-pages"> · 📄 {file.pageCount} Pages</span>
+                                )}
+                                <span> · {timeAgo(file.savedAt || file.createdAt)}</span>
+                              </p>
+                              <p className="pm-customer">
+                                👤 {file.customerName || 'Customer'} {file.deviceName ? `(${file.deviceName})` : ''}
+                              </p>
                             </div>
                           </div>
-                        </td>
-                        <td>
-                          <div className="cust-cell">
-                            <div className="cust-name">{file.customerName || 'Anonymous'}</div>
-                            <div className="cust-device">{file.deviceName}</div>
-                          </div>
-                        </td>
-                        <td><span className="size-tag">{formatBytes(file.size)}</span></td>
-                        <td><span className="time-tag">{timeAgo(file.savedAt || file.createdAt)}</span></td>
-                        <td>
-                          <div className="action-btns">
-                            <button
-                              className="btn btn-ghost btn-xs"
-                              title="Preview file in modal"
-                              onClick={() => setPreviewFile(file)}
-                            >
-                              👁️ View
+                        </div>
+
+                        <div className="pm-card-bottom">
+                          <div className="pm-left-btns">
+                            <button className="btn-icon-sm" onClick={() => setPreviewFile(file)} title="View">
+                              👁️
                             </button>
                             <button
-                              className={`btn btn-xs ${isFileInBill(file.uuid || file.id || file._id) ? 'btn-success' : 'btn-secondary'}`}
-                              title="Toggle Customer Bill Queue"
+                              className={`btn-pill-sm ${isBilled ? 'billed' : ''}`}
                               onClick={() => toggleFileInBill(file)}
                             >
-                              {isFileInBill(file.uuid || file.id || file._id) ? '✓ Billed' : '💳 Bill'}
-                            </button>
-                            <button
-                              className="btn btn-primary btn-xs"
-                              onClick={() => onTogglePrint && onTogglePrint(file)}
-                            >
-                              🖨️ Mark Printed
+                              {isBilled ? '✓ Billed' : '💳 Bill'}
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          <button
+                            className="btn btn-primary btn-sm pm-print-btn"
+                            onClick={() => onTogglePrint && onTogglePrint(file)}
+                          >
+                            🖨️ Mark Printed
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </motion.div>
         )}
@@ -246,53 +298,89 @@ export function PrintPage({ files, onTogglePrint, shop }) {
                 <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>No printed files yet</p>
               </div>
             ) : (
-              <div className="print-table-wrapper">
-                <table className="print-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>File</th>
-                      <th>Customer</th>
-                      <th>Size</th>
-                      <th>Printed</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPrinted.map((file, i) => (
-                      <tr key={file.uuid || file.id || i} style={{ opacity: 0.75 }}>
-                        <td className="row-num">{i + 1}</td>
-                        <td>
-                          <div className="file-cell">
-                            <span className="file-type-icon">{getMimeIcon(file.mimeType)}</span>
-                            <div className="file-name">{file.originalName}</div>
-                          </div>
-                        </td>
-                        <td><div className="cust-name">{file.customerName || 'Anonymous'}</div></td>
-                        <td><span className="size-tag">{formatBytes(file.size)}</span></td>
-                        <td><span className="badge badge-success" style={{ fontSize: '11px' }}>✓ Printed</span></td>
-                        <td>
-                          <div className="action-btns">
-                            <button
-                              className="btn btn-ghost btn-xs"
-                              title="Preview file in modal"
-                              onClick={() => setPreviewFile(file)}
-                            >
-                              👁️ View
-                            </button>
-                            <button
-                              className="btn btn-ghost btn-xs"
-                              onClick={() => onTogglePrint && onTogglePrint(file)}
-                            >
-                              ↩ Unmark
-                            </button>
-                          </div>
-                        </td>
+              <>
+                {/* Desktop History Table */}
+                <div className="print-table-wrapper print-desktop-only">
+                  <table className="print-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>File</th>
+                        <th>Customer</th>
+                        <th>Size</th>
+                        <th>Printed</th>
+                        <th>Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {filteredPrinted.map((file, i) => (
+                        <tr key={file.uuid || file.id || i} style={{ opacity: 0.85 }}>
+                          <td className="row-num">{i + 1}</td>
+                          <td>
+                            <div className="file-cell">
+                              <span className="file-type-icon">{getMimeIcon(file.mimeType)}</span>
+                              <div className="file-name">{file.originalName}</div>
+                            </div>
+                          </td>
+                          <td><div className="cust-name">{file.customerName || 'Anonymous'}</div></td>
+                          <td><span className="size-tag">{formatBytes(file.size)}</span></td>
+                          <td><span className="badge badge-success" style={{ fontSize: '11px' }}>✓ Printed</span></td>
+                          <td>
+                            <div className="action-btns">
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                title="Preview file in modal"
+                                onClick={() => setPreviewFile(file)}
+                              >
+                                👁️ View
+                              </button>
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                onClick={() => onTogglePrint && onTogglePrint(file)}
+                              >
+                                ↩ Unmark
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile History Card List */}
+                <div className="print-mobile-list">
+                  {filteredPrinted.map((file, i) => (
+                    <div key={file.uuid || file.id || i} className="print-mobile-card printed-card">
+                      <div className="pm-card-top">
+                        <div className="pm-file-info">
+                          <span className="pm-icon">{getMimeIcon(file.mimeType)}</span>
+                          <div className="pm-details">
+                            <p className="pm-name" title={file.originalName}>{file.originalName}</p>
+                            <p className="pm-meta">
+                              <span>{formatBytes(file.size)}</span>
+                              <span> · 👤 {file.customerName || 'Customer'}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="badge badge-success" style={{ fontSize: '10px' }}>✓ Printed</span>
+                      </div>
+
+                      <div className="pm-card-bottom">
+                        <button className="btn-icon-sm" onClick={() => setPreviewFile(file)} title="View">
+                          👁️ View
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => onTogglePrint && onTogglePrint(file)}
+                        >
+                          ↩ Unmark
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </motion.div>
         )}
@@ -394,6 +482,9 @@ export function PrintPage({ files, onTogglePrint, shop }) {
         .form-label { font-size: 0.8rem; font-weight: 700; color: #374151; }
         .mt-4 { margin-top: 1rem; }
 
+        .print-mobile-list { display: none; }
+        .print-desktop-only { display: block; }
+
         /* ── Mobile Responsive Breakpoints ── */
         @media (max-width: 1024px) {
           .print-stats-bar {
@@ -402,6 +493,133 @@ export function PrintPage({ files, onTogglePrint, shop }) {
         }
 
         @media (max-width: 768px) {
+          .print-desktop-only { display: none !important; }
+          .print-mobile-list { display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box; }
+
+          .print-mobile-card {
+            background: white;
+            border: 1px solid #E2E8F0;
+            border-radius: 14px;
+            padding: 12px 14px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .print-mobile-card.printed-card {
+            background: #F8FAFC;
+            border-left: 4px solid #10B981;
+          }
+
+          .pm-card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+          }
+
+          .pm-file-info {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            flex: 1;
+            min-width: 0;
+          }
+
+          .pm-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+          }
+
+          .pm-details {
+            flex: 1;
+            min-width: 0;
+          }
+
+          .pm-name {
+            font-size: 0.86rem;
+            font-weight: 700;
+            color: #0F172A;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
+          }
+
+          .pm-meta {
+            font-size: 0.72rem;
+            color: #64748B;
+            font-weight: 600;
+            margin-bottom: 2px;
+          }
+
+          .pm-pages {
+            color: var(--accent-primary);
+            font-weight: 700;
+          }
+
+          .pm-customer {
+            font-size: 0.72rem;
+            color: #475569;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .pm-card-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            padding-top: 8px;
+            border-top: 1px solid #F1F5F9;
+          }
+
+          .pm-left-btns {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+
+          .btn-icon-sm {
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 6px;
+            border: 1px solid #E2E8F0;
+            background: #F8FAFC;
+            color: #334155;
+            cursor: pointer;
+          }
+
+          .btn-pill-sm {
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 999px;
+            border: 1px solid #C7D2FE;
+            background: #EEF2FF;
+            color: #4F46E5;
+            cursor: pointer;
+          }
+
+          .btn-pill-sm.billed {
+            background: #ECFDF5;
+            color: #059669;
+            border-color: rgba(16, 185, 129, 0.3);
+          }
+
+          .pm-print-btn {
+            padding: 6px 12px !important;
+            font-size: 11.5px !important;
+            font-weight: 700 !important;
+            white-space: nowrap;
+          }
+
           .print-page {
             gap: 1rem;
           }
@@ -446,15 +664,6 @@ export function PrintPage({ files, onTogglePrint, shop }) {
           .print-toolbar-right {
             width: 100%;
             justify-content: space-between;
-          }
-
-          .print-table-wrapper {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-          }
-
-          .print-table {
-            min-width: 580px;
           }
 
           .settings-grid {

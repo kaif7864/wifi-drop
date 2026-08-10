@@ -45,6 +45,37 @@ function ActivityBar({ day, pct }) {
 export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
   const [tempQrCust, setTempQrCust] = useState('');
   const [tempQrExpiry, setTempQrExpiry] = useState('1h');
+  const [custSearch, setCustSearch] = useState('');
+
+  // Extract distinct unique customers from files & texts
+  const customerOptions = useMemo(() => {
+    const map = {};
+    [...files, ...texts].forEach((item) => {
+      const cid = item.customerId || 'cust_anonymous';
+      const name = item.customerName || item.deviceName || 'Anonymous';
+      if (!map[cid]) {
+        map[cid] = {
+          id: cid,
+          name: name,
+          device: item.deviceName || '',
+        };
+      }
+      if (item.customerName && item.customerName.trim()) {
+        map[cid].name = item.customerName.trim();
+      }
+    });
+    return Object.values(map);
+  }, [files, texts]);
+
+  const filteredCustomerOptions = useMemo(() => {
+    if (!custSearch) return customerOptions;
+    const q = custSearch.toLowerCase();
+    return customerOptions.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      c.device.toLowerCase().includes(q) ||
+      c.id.toLowerCase().includes(q)
+    );
+  }, [customerOptions, custSearch]);
 
   // Compute today's stats
   const today = new Date().toDateString();
@@ -192,26 +223,72 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           <div className="dash-card-header">
             <h3 className="dash-card-title">📱 Create Temp QR</h3>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
-              <label className="form-label">Customer Name / Token</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="form-label" style={{ margin: 0 }}>Customer Name / Folder</label>
+                <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
+                  {customerOptions.length} Customers Available
+                </span>
+              </div>
+              
+              {/* Single Smart Searchable Customer Input */}
               <input
                 type="text"
-                className="input input-sm"
-                placeholder="e.g. Ramesh Kumar or Token #5"
+                className="input input-sm w-full"
+                placeholder="🔍 Type or choose customer name / device..."
                 value={tempQrCust}
                 onChange={(e) => setTempQrCust(e.target.value)}
+                list="dash-tempqr-cust-datalist"
+                style={{ width: '100%', boxSizing: 'border-box' }}
               />
+              <datalist id="dash-tempqr-cust-datalist">
+                {customerOptions.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.device && c.device !== c.name ? `${c.name} (${c.device})` : c.name}
+                  </option>
+                ))}
+              </datalist>
+
+              {/* Quick Customer Pill Chips */}
+              {customerOptions.length > 0 && (
+                <div className="temp-cust-chips-row">
+                  {customerOptions.slice(0, 4).map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`temp-cust-chip ${tempQrCust === c.name ? 'active' : ''}`}
+                      onClick={() => setTempQrCust(c.name)}
+                    >
+                      👤 {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
             <div>
-              <label className="form-label">Expires In</label>
-              <select className="input input-sm" value={tempQrExpiry} onChange={(e) => setTempQrExpiry(e.target.value)}>
-                <option value="30m">30 Minutes</option>
-                <option value="1h">1 Hour</option>
-                <option value="4h">4 Hours</option>
-                <option value="24h">24 Hours</option>
-              </select>
+              <label className="form-label mb-1.5" style={{ display: 'block' }}>Expires In</label>
+              <div className="expiry-segmented-group">
+                {[
+                  { value: '30m', label: '30m' },
+                  { value: '1h', label: '1 Hour' },
+                  { value: '2h', label: '2 Hours' },
+                  { value: '4h', label: '4 Hours' },
+                  { value: '24h', label: '24 Hours' },
+                ].map((exp) => (
+                  <button
+                    key={exp.value}
+                    type="button"
+                    className={`expiry-pill-btn ${tempQrExpiry === exp.value ? 'active' : ''}`}
+                    onClick={() => setTempQrExpiry(exp.value)}
+                  >
+                    {exp.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
             <button
               className="btn btn-primary"
               onClick={() => onNavChange('qr_management')}
@@ -521,6 +598,79 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           font-weight: 700;
           color: #374151;
           margin-bottom: 6px;
+        }
+
+        /* ── Quick Customer Chips ── */
+        .temp-cust-chips-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 6px;
+        }
+
+        .temp-cust-chip {
+          padding: 4px 10px;
+          border-radius: 999px;
+          border: 1px solid #E2E8F0;
+          background: #F8FAFC;
+          color: #475569;
+          font-size: 0.72rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .temp-cust-chip:hover {
+          background: #EEF2FF;
+          border-color: #C7D2FE;
+          color: #4F46E5;
+        }
+
+        .temp-cust-chip.active {
+          background: #4F46E5;
+          border-color: #4F46E5;
+          color: #FFFFFF;
+          box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+        }
+
+        /* ── Segmented Expiry Control ── */
+        .expiry-segmented-group {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 4px;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          padding: 4px;
+          border-radius: 12px;
+        }
+
+        .expiry-pill-btn {
+          padding: 6px 4px;
+          border-radius: 8px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: #64748B;
+          font-size: 0.74rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-align: center;
+          white-space: nowrap;
+        }
+
+        .expiry-pill-btn:hover {
+          background: #FFFFFF;
+          color: #0F172A;
+        }
+
+        .expiry-pill-btn.active {
+          background: #FFFFFF;
+          color: #4F46E5;
+          border-color: #CBD5E1;
+          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
         }
 
         /* ── Responsive Breakpoints ── */

@@ -100,8 +100,10 @@ function Toast({ toast, onDismiss }) {
           display: flex;
           align-items: center;
           gap: 12px;
-          min-width: 300px;
-          max-width: min(440px, 92vw);
+          min-width: 260px;
+          max-width: min(420px, calc(100vw - 24px));
+          width: 100%;
+          box-sizing: border-box;
           pointer-events: all;
           user-select: none;
           z-index: 10000;

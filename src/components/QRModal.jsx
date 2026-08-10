@@ -133,15 +133,22 @@ export function QRModal({
 
           {/* Standee View Mode */}
           {viewMode === 'standee' ? (
-            <div className="standee-wrapper">
-              <div className="flex justify-between items-center mb-3">
-                <button className="btn btn-ghost btn-sm" onClick={() => setViewMode('qr')}>
-                  ← Back to QR
+            <div className="standee-modal-view">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  onClick={() => setViewMode('qr')}
+                  style={{ borderRadius: '999px', padding: '5px 14px', fontWeight: 700 }}
+                >
+                  ← Back to Digital QR
                 </button>
-                <span className="standee-label">Printable Counter Standee</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
+                  🖨️ Counter Standee
+                </span>
               </div>
               <QRStandee
-                shopName={shopName || 'WiFi Drop Transfer'}
+                shopName={shopName || 'Shop Counter'}
                 shopId={shopId || sessionId}
                 mobileUrl={qrData?.url}
                 qrCodeUrl={qrData?.qrDataUrl}

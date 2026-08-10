@@ -856,48 +856,55 @@ export function MobileView() {
                     const isPdf = f.mimeType?.includes('pdf') || (f.originalName || '').toLowerCase().endsWith('.pdf');
 
                     return (
-                      <div key={fId || i} className="view-file-card glass-card">
-                        <div className="flex items-start gap-3">
-                          <div className="file-type-avatar" style={{
-                            background: isImg ? '#EFF6FF' : isPdf ? '#FEF2F2' : '#F1F5F9',
-                            color: isImg ? '#2563EB' : isPdf ? '#DC2626' : '#475569'
-                          }}>
-                            {isImg ? '🖼️' : isPdf ? '📕' : '📄'}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div className="view-file-name" title={f.originalName}>
-                              {f.originalName}
+                      <div key={fId || i} className={`view-file-card ${f.printedStatus ? 'is-printed' : 'is-queued'}`}>
+                        {/* Card Top: Icon + Info + Status Pill */}
+                        <div className="view-file-header">
+                          <div className="view-file-left">
+                            <div className="file-type-avatar" style={{
+                              background: isImg ? '#EFF6FF' : isPdf ? '#FEF2F2' : '#F1F5F9',
+                              color: isImg ? '#2563EB' : isPdf ? '#DC2626' : '#475569'
+                            }}>
+                              {isImg ? '🖼️' : isPdf ? '📕' : '📄'}
                             </div>
-                            <div className="view-file-meta flex items-center gap-2 mt-1">
-                              <span>{f.size ? (f.size / (1024 * 1024) >= 1 ? `${(f.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`) : ''}</span>
-                              {f.pageCount > 1 && <span>· {f.pageCount} Pages</span>}
-                              {f.copies > 1 && <span>· {f.copies} Copies</span>}
-                            </div>
-                            {f.note && (
-                              <div className="view-file-note">
-                                🔑 Note: {f.note}
+                            <div className="view-file-info">
+                              <div className="view-file-name" title={f.originalName}>
+                                {f.originalName}
                               </div>
-                            )}
+                              <div className="view-file-meta">
+                                <span>{f.size ? (f.size / (1024 * 1024) >= 1 ? `${(f.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`) : ''}</span>
+                                {f.pageCount && f.pageCount > 1 && (
+                                  <span className="view-pages-tag"> · 📄 {f.pageCount} Pages</span>
+                                )}
+                                {f.copies && f.copies > 1 && <span> · {f.copies} Copies</span>}
+                              </div>
+                            </div>
                           </div>
+
+                          {/* Top Right Status Badge */}
+                          <span className={`print-status-tag ${f.printedStatus ? 'printed' : 'queue'}`}>
+                            {f.printedStatus ? '✓ Printed' : '⏳ In Queue'}
+                          </span>
                         </div>
 
-                        <div className="view-file-bottom flex items-center justify-between mt-3 pt-2.5">
-                          <span className={`print-status-tag ${f.printedStatus ? 'printed' : 'queue'}`}>
-                            {f.printedStatus ? '✓ Printed by Shop' : '⏳ In Print Queue'}
-                          </span>
-
-                          <div className="flex items-center gap-2">
-                            {previewUrl && (
-                              <a href={previewUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs">
-                                👁️ View
-                              </a>
-                            )}
-                            {downloadUrl && (
-                              <a href={downloadUrl} download={f.originalName} className="btn btn-secondary btn-xs">
-                                ⬇️ Download
-                              </a>
-                            )}
+                        {/* Optional Customer Note / Password */}
+                        {f.note && (
+                          <div className="view-file-note">
+                            🔑 Note: {f.note}
                           </div>
+                        )}
+
+                        {/* Card Bottom: Action Buttons */}
+                        <div className="view-file-actions-row">
+                          {previewUrl && (
+                            <a href={previewUrl} target="_blank" rel="noreferrer" className="view-card-btn btn-view">
+                              👁️ View Preview
+                            </a>
+                          )}
+                          {downloadUrl && (
+                            <a href={downloadUrl} download={f.originalName} className="view-card-btn btn-download">
+                              ⬇️ Download File
+                            </a>
+                          )}
                         </div>
                       </div>
                     );
@@ -1485,25 +1492,54 @@ export function MobileView() {
         .view-file-card {
           background: #FFFFFF;
           border: 1px solid #E2E8F0;
-          border-radius: 16px;
-          padding: 14px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
+          border-radius: 18px;
+          padding: 14px 16px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+          transition: all 0.2s ease;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
         }
 
-        .view-file-card:hover {
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        .view-file-card.is-printed {
+          border-left: 4px solid #10B981;
+          background: linear-gradient(180deg, #FFFFFF 0%, #F0FDF4 100%);
+        }
+
+        .view-file-card.is-queued {
+          border-left: 4px solid #F59E0B;
+        }
+
+        .view-file-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          width: 100%;
+        }
+
+        .view-file-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+          min-width: 0;
         }
 
         .file-type-avatar {
-          width: 44px;
-          height: 44px;
+          width: 42px;
+          height: 42px;
           border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 1.4rem;
+          font-size: 1.35rem;
           flex-shrink: 0;
+        }
+
+        .view-file-info {
+          flex: 1;
+          min-width: 0;
         }
 
         .view-file-name {
@@ -1513,6 +1549,7 @@ export function MobileView() {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          margin-bottom: 2px;
         }
 
         .view-file-meta {
@@ -1521,22 +1558,33 @@ export function MobileView() {
           font-weight: 600;
         }
 
+        .view-pages-tag {
+          color: var(--accent-primary);
+          font-weight: 700;
+        }
+
         .view-file-note {
           font-size: 0.72rem;
           color: #4F46E5;
           background: #EEF2FF;
-          padding: 3px 8px;
-          border-radius: 6px;
-          margin-top: 6px;
+          padding: 4px 10px;
+          border-radius: 8px;
           display: inline-block;
           font-weight: 600;
+          width: fit-content;
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .print-status-tag {
           font-size: 0.72rem;
           font-weight: 800;
           padding: 4px 10px;
-          border-radius: 8px;
+          border-radius: 999px;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .print-status-tag.printed {
@@ -1549,6 +1597,54 @@ export function MobileView() {
           background: #FFFBEB;
           color: #D97706;
           border: 1px solid #FDE68A;
+        }
+
+        .view-file-actions-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          padding-top: 10px;
+          border-top: 1px solid #F1F5F9;
+          width: 100%;
+        }
+
+        .view-card-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 8px 12px;
+          border-radius: 10px;
+          font-size: 0.78rem;
+          font-weight: 700;
+          text-decoration: none;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-align: center;
+          white-space: nowrap;
+        }
+
+        .btn-view {
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          color: #334155;
+        }
+
+        .btn-view:hover {
+          background: #F1F5F9;
+          border-color: #CBD5E1;
+        }
+
+        .btn-download {
+          background: #EEF2FF;
+          border: 1px solid #C7D2FE;
+          color: #4F46E5;
+        }
+
+        .btn-download:hover {
+          background: #4F46E5;
+          color: #FFFFFF;
+          border-color: #4F46E5;
         }
 
         .view-text-card {

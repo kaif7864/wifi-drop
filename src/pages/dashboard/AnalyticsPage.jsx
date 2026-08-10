@@ -81,11 +81,20 @@ export function AnalyticsPage({ files, texts }) {
   const fileTypes = useMemo(() => {
     const map = {};
     files.forEach((f) => {
-      const type = f.mimeType?.startsWith('image/') ? 'Images'
-        : f.mimeType?.includes('pdf') ? 'PDF'
-        : f.mimeType?.startsWith('video/') ? 'Video'
-        : f.mimeType?.startsWith('audio/') ? 'Audio'
-        : 'Other';
+      const name = (f.originalName || '').toLowerCase();
+      const mime = (f.mimeType || '').toLowerCase();
+
+      let type = 'Archives & Other';
+      if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|ico|heic)$/i.test(name)) {
+        type = 'Images';
+      } else if (mime.includes('pdf') || name.endsWith('.pdf')) {
+        type = 'PDF';
+      } else if (mime.includes('word') || mime.includes('document') || mime.includes('sheet') || mime.includes('excel') || mime.includes('presentation') || mime.includes('powerpoint') || mime.includes('text') || /\.(docx?|xlsx?|pptx?|txt|csv|rtf|odt|ods|odp)$/i.test(name)) {
+        type = 'Docs (Office)';
+      } else if (mime.startsWith('video/') || mime.startsWith('audio/') || /\.(mp4|mp3|mkv|mov|avi|wav|aac|m4a|webm)$/i.test(name)) {
+        type = 'Media';
+      }
+
       map[type] = (map[type] || 0) + 1;
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
@@ -105,6 +114,89 @@ export function AnalyticsPage({ files, texts }) {
   const printedPct = files.length > 0 ? Math.round((files.filter((f) => f.printedStatus).length / files.length) * 100) : 0;
   const uniqueCustomers = new Set(files.map((f) => f.customerId || 'anon')).size;
 
+  // Curated, structured insights list
+  const insightsList = useMemo(() => {
+    const list = [];
+
+    // 1. Files & Traffic Insight
+    if (files.length === 0) {
+      list.push({
+        type: 'info',
+        icon: '📭',
+        title: 'Ready for First Upload',
+        desc: 'Place your Counter QR standee at your front desk to start receiving customer files instantly.',
+      });
+    } else if (todayFiles > 0) {
+      list.push({
+        type: 'traction',
+        icon: '🚀',
+        title: 'Active Today',
+        desc: `${todayFiles} file${todayFiles > 1 ? 's' : ''} received today across ${uniqueCustomers} customer${uniqueCustomers > 1 ? 's' : ''}.`,
+      });
+    } else {
+      list.push({
+        type: 'traction',
+        icon: '📦',
+        title: 'Store Archive',
+        desc: `${files.length} files successfully received and organized in your store folders.`,
+      });
+    }
+
+    // 2. Print Operations Insight
+    const pendingCount = files.filter((f) => !f.printedStatus).length;
+    if (files.length > 0 && pendingCount === 0) {
+      list.push({
+        type: 'success',
+        icon: '✅',
+        title: 'Print Queue Cleared',
+        desc: '100% of all received files have been printed and processed successfully.',
+      });
+    } else if (pendingCount > 0) {
+      list.push({
+        type: 'warning',
+        icon: '⏳',
+        title: `${pendingCount} Print${pendingCount > 1 ? 's' : ''} Pending`,
+        desc: `${pendingCount} file${pendingCount > 1 ? 's' : ''} currently waiting in your Print Queue.`,
+      });
+    }
+
+    // 3. Customer & CRM Footfall
+    if (uniqueCustomers > 1) {
+      list.push({
+        type: 'crm',
+        icon: '👥',
+        title: 'Customer Footfall',
+        desc: `${uniqueCustomers} unique customer devices connected to your shop counter.`,
+      });
+    } else {
+      list.push({
+        type: 'crm',
+        icon: '🎯',
+        title: 'Customer Isolation',
+        desc: 'Each customer gets their own secure private folder without cross-access.',
+      });
+    }
+
+    // 4. Messaging & Pro Tips
+    if (texts.length > 0) {
+      list.push({
+        type: 'notes',
+        icon: '💬',
+        title: 'Customer Notes',
+        desc: `${texts.length} customer note${texts.length > 1 ? 's' : ''} received with passwords or print copies instructions.`,
+      });
+    } else {
+      list.push({
+        type: 'notes',
+        icon: '💡',
+        title: 'Shopkeeper Pro Tip',
+        desc: 'Use Customer Folders QR code to let specific customers upload directly into their dedicated folder.',
+      });
+    }
+
+    return list.slice(0, 4);
+  }, [files, texts, todayFiles, uniqueCustomers]);
+
   return (
     <div className="analytics-page">
       {/* Key Metrics */}
@@ -115,7 +207,38 @@ export function AnalyticsPage({ files, texts }) {
         <MetricCard icon="💬" label="Text Notes" value={texts.length} color="#7C3AED" bg="#F5F3FF" />
       </div>
 
-      {/* Charts Row */}
+      {/* AI Store Intelligence Card */}
+      <div className="intelligence-card">
+        <div className="intelligence-header">
+          <div className="flex items-center gap-3">
+            <div className="intelligence-sparkle-icon">✨</div>
+            <div>
+              <h3 className="intelligence-title">Store Intelligence & Recommendations</h3>
+              <p className="intelligence-subtitle">Real-time operational analysis and smart suggestions for your counter</p>
+            </div>
+          </div>
+          <div className="intelligence-live-pill">
+            <span className="live-pulse-dot"></span>
+            <span>Live Analysis</span>
+          </div>
+        </div>
+
+        <div className="intelligence-grid-2x2">
+          {insightsList.map((item, i) => (
+            <div key={i} className={`intel-item intel-${item.type}`}>
+              <div className="intel-icon-box">{item.icon}</div>
+              <div className="intel-content">
+                <div className="intel-title-row">
+                  <h4 className="intel-title">{item.title}</h4>
+                </div>
+                <p className="intel-desc">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Activity & Trend Charts (2 Columns) */}
       <div className="charts-row">
         {/* Daily Activity */}
         <div className="chart-card">
@@ -134,12 +257,12 @@ export function AnalyticsPage({ files, texts }) {
         </div>
       </div>
 
-      {/* Bottom Row */}
-      <div className="analytics-bottom">
+      {/* File Types & Top Customers Breakdown (Balanced 2 Columns) */}
+      <div className="breakdowns-row">
         {/* File Type Breakdown */}
         <div className="chart-card">
           <div className="chart-header">
-            <h3 className="chart-title">📋 File Types</h3>
+            <h3 className="chart-title">📋 File Types Breakdown</h3>
           </div>
           {fileTypes.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No files yet</p>
@@ -147,7 +270,11 @@ export function AnalyticsPage({ files, texts }) {
             <div className="type-breakdown">
               {fileTypes.map(([type, count]) => {
                 const pct = Math.round((count / files.length) * 100);
-                const color = type === 'Images' ? '#D97706' : type === 'PDF' ? '#EF4444' : type === 'Video' ? '#7C3AED' : '#059669';
+                const color = type === 'Images' ? '#D97706'
+                  : type === 'PDF' ? '#EF4444'
+                  : type === 'Docs (Office)' ? '#2563EB'
+                  : type === 'Media' ? '#7C3AED'
+                  : '#059669';
                 return (
                   <div key={type} className="type-row">
                     <span className="type-name">{type}</span>
@@ -168,10 +295,10 @@ export function AnalyticsPage({ files, texts }) {
           )}
         </div>
 
-        {/* Top Customers */}
+        {/* Top Customers Leaderboard */}
         <div className="chart-card">
           <div className="chart-header">
-            <h3 className="chart-title">🏆 Top Customers</h3>
+            <h3 className="chart-title">🏆 Top Customers Leaderboard</h3>
           </div>
           {topCustomers.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No customers yet</p>
@@ -190,35 +317,15 @@ export function AnalyticsPage({ files, texts }) {
                     <motion.div
                       className="top-cust-bar-fill"
                       initial={{ width: 0 }}
-                      animate={{ width: `${(count / topCustomers[0][1]) * 100}%` }}
+                      animate={{ width: `${(count / (topCustomers[0]?.[1] || 1)) * 100}%` }}
                       transition={{ duration: 0.5, delay: i * 0.1 }}
                     />
                   </div>
-                  <span className="top-cust-count">{count} files</span>
+                  <span className="top-cust-count">{count} {count > 1 ? 'files' : 'file'}</span>
                 </div>
               ))}
             </div>
           )}
-        </div>
-
-        {/* AI Insights */}
-        <div className="chart-card insights-card">
-          <div className="chart-header">
-            <h3 className="chart-title">💡 Insights</h3>
-          </div>
-          <div className="insights-list">
-            {[
-              files.length > 10 && `🚀 You've received ${files.length} files total — great traction!`,
-              printedPct === 100 && `✅ All files printed — excellent print management!`,
-              printedPct < 50 && files.length > 0 && `⚠️ ${100 - printedPct}% files still pending print. Clear the queue!`,
-              uniqueCustomers > 3 && `👥 ${uniqueCustomers} unique customers have used your shop.`,
-              todayFiles > 5 && `📈 ${todayFiles} files received today — busy day!`,
-              texts.length > 0 && `💬 ${texts.length} text notes shared via mobile.`,
-              !files.length && `📭 No files yet. Share your QR code with customers to start!`,
-            ].filter(Boolean).slice(0, 4).map((insight, i) => (
-              <div key={i} className="insight-item">{insight}</div>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -275,10 +382,21 @@ export function AnalyticsPage({ files, texts }) {
           gap: 1rem;
         }
 
-        .analytics-bottom {
+        .breakdowns-row {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
+          grid-template-columns: 1fr 1fr;
           gap: 1rem;
+        }
+
+        .insights-section {
+          width: 100%;
+        }
+
+        .insights-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1rem;
+          width: 100%;
         }
 
         .chart-card {
@@ -287,6 +405,7 @@ export function AnalyticsPage({ files, texts }) {
           border-radius: 18px;
           padding: 1.25rem 1.5rem;
           box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          height: fit-content;
         }
 
         .chart-header { margin-bottom: 1rem; }
@@ -327,19 +446,19 @@ export function AnalyticsPage({ files, texts }) {
         .bar-label { font-size: 10px; font-weight: 700; color: #94A3B8; }
         .bar-val { font-size: 10px; font-weight: 800; color: #64748B; }
 
-        .type-breakdown { display: flex; flex-direction: column; gap: 10px; }
+        .type-breakdown { display: flex; flex-direction: column; gap: 12px; }
 
         .type-row {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
         }
 
-        .type-name { font-size: 0.8rem; font-weight: 700; width: 60px; flex-shrink: 0; }
+        .type-name { font-size: 0.82rem; font-weight: 700; width: 105px; flex-shrink: 0; color: #334155; }
 
         .type-bar-track {
           flex: 1;
-          height: 8px;
+          height: 9px;
           background: #F1F5F9;
           border-radius: 999px;
           overflow: hidden;
@@ -347,9 +466,9 @@ export function AnalyticsPage({ files, texts }) {
 
         .type-bar-fill { height: 100%; border-radius: 999px; }
 
-        .type-count { font-size: 0.75rem; font-weight: 700; color: #64748B; width: 70px; text-align: right; flex-shrink: 0; }
+        .type-count { font-size: 0.76rem; font-weight: 800; color: #64748B; width: 75px; text-align: right; flex-shrink: 0; }
 
-        .top-cust-list { display: flex; flex-direction: column; gap: 10px; }
+        .top-cust-list { display: flex; flex-direction: column; gap: 12px; }
 
         .top-cust-row {
           display: flex;
@@ -369,11 +488,11 @@ export function AnalyticsPage({ files, texts }) {
           flex-shrink: 0;
         }
 
-        .top-cust-name { font-size: 0.82rem; font-weight: 700; flex-shrink: 0; min-width: 80px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .top-cust-name { font-size: 0.82rem; font-weight: 700; flex-shrink: 0; min-width: 80px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1E293B; }
 
         .top-cust-bar {
           flex: 1;
-          height: 8px;
+          height: 9px;
           background: #F1F5F9;
           border-radius: 999px;
           overflow: hidden;
@@ -385,17 +504,144 @@ export function AnalyticsPage({ files, texts }) {
           border-radius: 999px;
         }
 
-        .top-cust-count { font-size: 0.72rem; font-weight: 700; color: #64748B; flex-shrink: 0; }
+        .top-cust-count { font-size: 0.74rem; font-weight: 800; color: #64748B; flex-shrink: 0; }
 
-        .insight-item {
-          font-size: 0.82rem;
-          font-weight: 600;
-          color: #374151;
-          padding: 10px 14px;
+        /* ── Unified Store Intelligence Hub ── */
+        .intelligence-card {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 20px;
+          padding: 1.5rem;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .intelligence-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 1rem;
+          border-bottom: 1px solid #F1F5F9;
+          margin-bottom: 1.25rem;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .intelligence-sparkle-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
+          background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.15rem;
+          color: white;
+          flex-shrink: 0;
+          box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+        }
+
+        .intelligence-title {
+          font-size: 1rem;
+          font-weight: 800;
+          color: #0F172A;
+          margin: 0;
+        }
+
+        .intelligence-subtitle {
+          font-size: 0.76rem;
+          color: #64748B;
+          margin: 2px 0 0 0;
+        }
+
+        .intelligence-live-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: #ECFDF5;
+          color: #059669;
+          border: 1px solid #A7F3D0;
+          padding: 4px 12px;
+          border-radius: 999px;
+          font-size: 0.72rem;
+          font-weight: 800;
+        }
+
+        .live-pulse-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #10B981;
+          animation: intelPulse 1.5s infinite;
+        }
+
+        @keyframes intelPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .intelligence-grid-2x2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.875rem;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .intel-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+          padding: 14px 16px;
+          border-radius: 16px;
           background: #F8FAFC;
-          border-radius: 10px;
-          border: 1px solid #F1F5F9;
-          line-height: 1.5;
+          border: 1px solid #E2E8F0;
+          transition: all 0.18s ease;
+        }
+
+        .intel-item:hover {
+          background: #FFFFFF;
+          border-color: #CBD5E1;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+        }
+
+        .intel-icon-box {
+          width: 42px;
+          height: 42px;
+          border-radius: 12px;
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.25rem;
+          flex-shrink: 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+
+        .intel-content {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .intel-title-row {
+          margin-bottom: 3px;
+        }
+
+        .intel-title {
+          font-size: 0.88rem;
+          font-weight: 800;
+          color: #0F172A;
+          margin: 0;
+        }
+
+        .intel-desc {
+          font-size: 0.78rem;
+          color: #64748B;
+          line-height: 1.45;
+          margin: 0;
         }
 
         /* ── Mobile Responsive Breakpoints ── */
@@ -404,11 +650,15 @@ export function AnalyticsPage({ files, texts }) {
             grid-template-columns: repeat(2, 1fr);
           }
 
+          .intelligence-grid-2x2 {
+            grid-template-columns: 1fr;
+          }
+
           .charts-row {
             grid-template-columns: 1fr;
           }
 
-          .analytics-bottom {
+          .breakdowns-row {
             grid-template-columns: 1fr;
           }
         }
@@ -420,6 +670,16 @@ export function AnalyticsPage({ files, texts }) {
 
           .metrics-grid {
             grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+          }
+
+          .intelligence-card {
+            padding: 1.1rem;
+            border-radius: 16px;
+          }
+
+          .intelligence-grid-2x2 {
+            grid-template-columns: 1fr;
             gap: 0.75rem;
           }
 

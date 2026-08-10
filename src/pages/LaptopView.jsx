@@ -523,6 +523,7 @@ export function LaptopView() {
                 <QRStandee
                   qrDataUrl={qrUrl}
                   shopName={shop ? shop.shopName : 'Direct Print & File Drop'}
+                  shopId={shop ? (shop.shopId || shop.id) : sessionId}
                   sessionId={sessionId}
                 />
               </div>
@@ -597,19 +598,25 @@ export function LaptopView() {
           overflow-y: auto;
           overflow-x: hidden;
           box-sizing: border-box;
+          position: relative;
         }
 
         .main-header {
           padding: var(--space-4) var(--space-6);
           border-bottom: 1px solid var(--border);
-          background: var(--bg-secondary);
+          background: rgba(255, 255, 255, 0.97);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
           display: flex;
           flex-direction: column;
           gap: 10px;
           position: sticky;
           top: 0;
-          z-index: 10;
+          z-index: 100;
           width: 100%;
+          flex-shrink: 0;
+          box-sizing: border-box;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
         }
 
         .header-top-row {
@@ -685,7 +692,6 @@ export function LaptopView() {
         .content-area {
           flex: 1;
           padding: 1.5rem 2rem;
-          overflow-y: auto;
           width: 100%;
           max-width: 100%;
           box-sizing: border-box;
@@ -766,17 +772,18 @@ export function LaptopView() {
         /* ── Responsive Tablet Breakpoints (<1024px) ── */
         @media (max-width: 1024px) {
           .laptop-layout {
-            height: auto;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: visible;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
           }
 
           .laptop-main {
             width: 100%;
-            height: auto;
-            min-height: 100vh;
-            overflow-y: visible;
+            height: 100vh;
+            height: 100dvh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
           }
 
           .mobile-hamburger-btn {
