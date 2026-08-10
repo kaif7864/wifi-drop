@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { config } from '../config';
+import { PdfCanvasViewer } from './PdfCanvasViewer';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 const PDF_TYPE = 'application/pdf';
@@ -292,13 +293,10 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
             <div className="preview-header">
               <span className="preview-title">{file.originalName}</span>
               <div className="flex items-center gap-2">
-                <button className="btn btn-ghost btn-sm" onClick={handleOpenInNewTab}>
-                  Open ↗
-                </button>
                 <button className="btn btn-primary btn-sm" onClick={handleDownload}>
                   Download ⬇
                 </button>
-                <button className="btn-icon" onClick={() => setShowPreview(false)}>✕</button>
+                <button className="btn-icon btn-close-preview" onClick={() => setShowPreview(false)}>✕</button>
               </div>
             </div>
             <div className="preview-body">
@@ -310,11 +308,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                 />
               )}
               {isPdf && (
-                <iframe
-                  src={`${previewUrl}#toolbar=1&navpanes=0`}
-                  title={file.originalName}
-                  className="preview-iframe"
-                />
+                <PdfCanvasViewer url={previewUrl} name={file.originalName} />
               )}
               {isVideo && (
                 <video controls src={previewUrl} className="preview-video" autoPlay />
@@ -527,11 +521,15 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           }
 
           .preview-overlay {
-            padding: 0.75rem;
+            padding: max(24px, env(safe-area-inset-top, 24px)) 0 0 0;
+            align-items: flex-end;
           }
 
           .preview-modal {
-            max-height: 90vh;
+            max-height: calc(100dvh - 64px);
+            height: calc(100dvh - 64px);
+            border-radius: 20px 20px 0 0;
+            border: none;
           }
 
           .preview-header {
@@ -539,17 +537,27 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           }
 
           .preview-title {
-            max-width: 160px;
+            max-width: 150px;
+            font-size: 0.82rem;
+          }
+
+          .btn-close-preview {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #FEF2F2;
+            color: #DC2626;
+            border: 1.5px solid #FCA5A5;
+            font-size: 16px;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
           }
 
           .preview-body {
-            padding: 1rem;
+            padding: 0.5rem;
             min-height: 220px;
-          }
-
-          .preview-iframe, .preview-image, .preview-video {
-            height: 55vh;
-            max-height: 55vh;
           }
         }
       `}</style>
