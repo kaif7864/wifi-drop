@@ -27,6 +27,7 @@ import { SettingsPage } from './dashboard/SettingsPage';
 import { NotificationContainer } from '../components/Notification';
 import { config } from '../config';
 import { playNotificationSound } from '../utils/audio';
+import { sendSystemNotification, requestNotificationPermission } from '../utils/notification';
 
 const PAGE_TITLES = {
   dashboard: '📊 Dashboard Overview',
@@ -116,10 +117,7 @@ export function LaptopView() {
 
   // Request browser notification permission on mount if enabled
   useEffect(() => {
-    const notifEnabled = localStorage.getItem('wifidrop_notif_enabled') !== 'false';
-    if (notifEnabled && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
+    requestNotificationPermission().catch(() => {});
   }, []);
 
   // Listen for real-time socket events
@@ -137,20 +135,14 @@ export function LaptopView() {
       addReceivedFile(fileData);
 
       const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
-      const notifEnabled = localStorage.getItem('wifidrop_notif_enabled') !== 'false';
-
       if (soundEnabled) {
         playNotificationSound();
       }
 
-      if (notifEnabled && 'Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(`📥 New File: ${fileData.originalName || 'Received File'}`, {
-            body: `From: ${fileData.customerName || fileData.deviceName || 'Customer'}`,
-            icon: '/favicon.ico',
-          });
-        } catch {}
-      }
+      sendSystemNotification(`📥 New File: ${fileData.originalName || 'Received File'}`, {
+        body: `From: ${fileData.customerName || fileData.deviceName || 'Customer'}`,
+        tag: `file_${fileId}`,
+      });
 
       addToast({
         dedupeKey: `file_${fileId || fileData.originalName}`,
@@ -174,20 +166,14 @@ export function LaptopView() {
       addReceivedText(textData);
 
       const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
-      const notifEnabled = localStorage.getItem('wifidrop_notif_enabled') !== 'false';
-
       if (soundEnabled) {
         playNotificationSound();
       }
 
-      if (notifEnabled && 'Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(`💬 Note from ${textData.customerName || textData.deviceName || 'Customer'}`, {
-            body: textData.text?.slice(0, 60),
-            icon: '/favicon.ico',
-          });
-        } catch {}
-      }
+      sendSystemNotification(`💬 Note from ${textData.customerName || textData.deviceName || 'Customer'}`, {
+        body: textData.text?.slice(0, 60),
+        tag: `text_${textId}`,
+      });
 
       addToast({
         dedupeKey: `text_${textId || textData.text?.slice(0, 20)}`,

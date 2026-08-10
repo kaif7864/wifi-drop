@@ -14,6 +14,7 @@ import { getHardwareFingerprint } from '../utils/fingerprint';
 import { stageUploadInQueue, getStagedQueue, clearStagedItem } from '../utils/offlineQueue';
 import { config } from '../config';
 import { PdfCanvasViewer } from '../components/PdfCanvasViewer';
+import { sendSystemNotification, requestNotificationPermission } from '../utils/notification';
 
 const DEVICE_NAME_KEY = 'wifidrop_device_name';
 
@@ -135,12 +136,20 @@ export function MobileView() {
           )
         );
       }
+      fetchHistory(shopId, sessionId, null, effectiveCustomerId).catch(() => {});
+      sendSystemNotification('🖨️ Document Printed!', {
+        body: 'Your document was printed successfully by the counter.',
+        tag: 'print_' + Date.now(),
+      });
     };
+
     const handleRevokeUpdate = (data) => {
-      const cleanCurrent = (sessionId || '').toLowerCase().trim();
-      const revokedId = (data?.qrId || '').toLowerCase().trim();
-      if (!revokedId || revokedId === cleanCurrent) {
+      if (data.session === sessionId || data.shopId === shopId) {
         setSessionExpired(true);
+        sendSystemNotification('⏱️ Session Expired', {
+          body: 'Your view access session has ended.',
+          tag: 'revoke_' + Date.now(),
+        });
       }
     };
 
@@ -155,7 +164,7 @@ export function MobileView() {
       socket.off('session_revoked', handleRevokeUpdate);
       socket.off('temp_qr_revoked', handleRevokeUpdate);
     };
-  }, [socket, sessionId]);
+  }, [socket, sessionId, shopId, effectiveCustomerId, fetchHistory]);
 
   // Fetch session history for customer view ONLY if in valid time-limited view session
   useEffect(() => {
