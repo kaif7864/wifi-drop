@@ -32,14 +32,110 @@ function StatCard({ icon, label, value, color = '#4F46E5', bg = '#EEF2FF', trend
   );
 }
 
-function ActivityBar({ day, pct, count }) {
+function ActivityAreaChart({ data }) {
+  if (!data || !data.length) return null;
+
+  const width = 420;
+  const height = 110;
+  const paddingX = 28;
+  const paddingTop = 22;
+  const paddingBottom = 22;
+
+  const maxVal = Math.max(...data.map((d) => d.count), 1);
+  const chartHeight = height - paddingTop - paddingBottom;
+  const stepX = (width - paddingX * 2) / (data.length - 1);
+
+  const points = data.map((d, i) => {
+    const x = paddingX + i * stepX;
+    const y = height - paddingBottom - (d.count / maxVal) * chartHeight;
+    return { x, y, day: d.day, count: d.count };
+  });
+
+  // Generate smooth cubic bezier curve
+  let pathD = `M ${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cp1x = p0.x + (p1.x - p0.x) / 2;
+    const cp1y = p0.y;
+    const cp2x = p0.x + (p1.x - p0.x) / 2;
+    const cp2y = p1.y;
+    pathD += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p1.x},${p1.y}`;
+  }
+
+  const areaD = `${pathD} L ${points[points.length - 1].x},${height - 10} L ${points[0].x},${height - 10} Z`;
+
   return (
-    <div className="activity-bar-col">
-      <div className="activity-bar-track">
-        <div className="activity-bar-fill" style={{ height: `${pct}%` }} />
-      </div>
-      <span className="activity-bar-day">{day}</span>
-      <span className="activity-bar-count">{count}</span>
+    <div className="activity-wave-container">
+      <svg viewBox={`0 0 ${width} ${height + 22}`} className="activity-wave-svg" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="activityAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4F46E5" stopOpacity="0.32" />
+            <stop offset="100%" stopColor="#818CF8" stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+
+        {/* Gradient Filled Wave Area */}
+        <path d={areaD} fill="url(#activityAreaGrad)" />
+
+        {/* Smooth Curved Line */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke="#4F46E5"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Data Points & Badges */}
+        {points.map((p, i) => (
+          <g key={i} className="wave-point-group">
+            {p.count > 0 && (
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="7"
+                fill="#4F46E5"
+                opacity="0.22"
+              />
+            )}
+
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r="4.5"
+              fill={p.count > 0 ? '#4F46E5' : '#CBD5E1'}
+              stroke="#FFFFFF"
+              strokeWidth="2"
+            />
+
+            <text
+              x={p.x}
+              y={p.y - 8}
+              textAnchor="middle"
+              className="wave-count-text"
+              fill={p.count > 0 ? '#4F46E5' : '#94A3B8'}
+              fontSize="11"
+              fontWeight={p.count > 0 ? '800' : '600'}
+            >
+              {p.count}
+            </text>
+
+            <text
+              x={p.x}
+              y={height + 15}
+              textAnchor="middle"
+              className="wave-day-text"
+              fill="#64748B"
+              fontSize="10.5"
+              fontWeight="700"
+            >
+              {p.day}
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
@@ -161,11 +257,7 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
             <h3 className="dash-card-title">📈 Activity — Last 7 Days</h3>
             <span className="activity-total-chip">{totalWeeklyActivity} Transfers</span>
           </div>
-          <div className="activity-chart">
-            {activityData.map((d, i) => (
-              <ActivityBar key={i} day={d.day} pct={d.pct} count={d.count} />
-            ))}
-          </div>
+          <ActivityAreaChart data={activityData} />
 
           {/* Activity Insights Strip — Covers bottom blank space */}
           <div className="activity-insights-row">
@@ -496,34 +588,19 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           flex-shrink: 0;
         }
 
-        .activity-chart {
-          display: flex;
-          align-items: flex-end;
-          gap: 10px;
-          height: 125px;
+        .activity-wave-container {
           width: 100%;
-          box-sizing: border-box;
-          margin-bottom: 12px;
-        }
-
-        .activity-bar-col {
-          flex: 1;
-          min-width: 0;
+          height: 145px;
           display: flex;
-          flex-direction: column;
           align-items: center;
-          gap: 4px;
-          height: 100%;
+          justify-content: center;
+          margin-bottom: 8px;
         }
 
-        .activity-bar-track {
-          flex: 1;
+        .activity-wave-svg {
           width: 100%;
-          background: #F1F5F9;
-          border-radius: 6px;
-          display: flex;
-          align-items: flex-end;
-          overflow: hidden;
+          height: 100%;
+          overflow: visible;
         }
 
         .activity-bar-fill {
