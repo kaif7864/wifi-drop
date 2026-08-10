@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useAuth } from '../context/AuthContext';
+import { navigate } from '../App';
 import { FileCard } from '../components/FileCard';
 import { TextShare } from '../components/TextShare';
 import { TimelineHistory } from '../components/TimelineHistory';
@@ -70,6 +71,11 @@ export function LaptopView() {
   const [activeNav, setActiveNav] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Derived shop/session identifiers — defined early so all hooks can access them
+  const guestSessionId = useMemo(() => getOrCreateSessionId(), []);
+  const activeShopId = shop?.shopId || null;
+  const targetSessionId = activeShopId ? null : guestSessionId;
+
   const addToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, ...toast }]);
@@ -91,6 +97,8 @@ export function LaptopView() {
         message: `${fileData.deviceName || 'Mobile'} transferred a file`,
         file: fileData,
       });
+      // Backup: also re-fetch from server to catch any missed/mismatched socket events
+      setTimeout(() => fetchHistory(activeShopId, targetSessionId, token), 1000);
     };
 
     const handleTextReceived = (textData) => {
@@ -100,6 +108,8 @@ export function LaptopView() {
         title: `💬 Note from ${textData.deviceName || 'Mobile'}`,
         message: textData.text?.slice(0, 60),
       });
+      // Backup: also re-fetch from server
+      setTimeout(() => fetchHistory(activeShopId, targetSessionId, token), 1000);
     };
 
     socket.on('file_received', handleFileReceived);
@@ -109,16 +119,12 @@ export function LaptopView() {
       socket.off('file_received', handleFileReceived);
       socket.off('text_received', handleTextReceived);
     };
-  }, [socket, addReceivedFile, addReceivedText, addToast]);
+  }, [socket, addReceivedFile, addReceivedText, addToast, fetchHistory, activeShopId, targetSessionId, token]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('all');
   const [qrUrl, setQrUrl] = useState('');
   const [lang, setLang] = useState(() => localStorage.getItem('wifidrop_lang') || 'en');
-
-  const guestSessionId = useMemo(() => getOrCreateSessionId(), []);
-  const activeShopId = shop?.shopId || null;
-  const targetSessionId = activeShopId ? null : guestSessionId;
 
   // Fetch existing history on mount & auto-sync
   useEffect(() => {
@@ -298,10 +304,10 @@ export function LaptopView() {
                 </div>
               ) : (
                 <div className="auth-actions flex items-center gap-1">
-                  <a href="/login" className="btn btn-ghost btn-xs header-auth-btn">Login</a>
-                  <a href="/register" className="btn btn-primary btn-xs header-auth-btn">
+                  <button className="btn btn-ghost btn-xs header-auth-btn" onClick={() => navigate('/login')}>Login</button>
+                  <button className="btn btn-primary btn-xs header-auth-btn" onClick={() => navigate('/register')}>
                     <span>🏪</span> Register
-                  </a>
+                  </button>
                 </div>
               )}
             </div>

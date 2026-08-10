@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { config } from '../../config';
+import { navigate } from '../../App';
 
 export function SettingsPage({ shop, sessionId }) {
   const [shopName, setShopName] = useState(shop?.shopName || '');
@@ -271,8 +272,8 @@ export function SettingsPage({ shop, sessionId }) {
                 Register your shop to unlock all features and keep your data safe.
               </p>
               <div className="flex items-center gap-2">
-                <a href="/register" className="btn btn-primary btn-sm">🏪 Register Shop</a>
-                <a href="/login" className="btn btn-secondary btn-sm">🔑 Shop Login</a>
+                <button className="btn btn-primary btn-sm" onClick={() => navigate('/register')}>🏪 Register Shop</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => navigate('/login')}>🔑 Shop Login</button>
               </div>
             </div>
           )}
