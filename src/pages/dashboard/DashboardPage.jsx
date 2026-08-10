@@ -226,18 +226,24 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
         .dashboard-page {
           display: flex;
           flex-direction: column;
-          gap: 1.5rem;
+          gap: 1.25rem;
           width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-x: hidden;
         }
 
         .dashboard-greeting {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          padding: 1.5rem 1.75rem;
+          padding: 1.25rem 1.5rem;
           background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
           border-radius: 20px;
           color: white;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .greeting-title {
@@ -321,6 +327,9 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           grid-template-columns: 2fr 1fr;
           grid-template-rows: auto auto;
           gap: 1rem;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .dash-card {
@@ -329,6 +338,10 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           border-radius: 18px;
           padding: 1.25rem 1.5rem;
           box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
         }
 
         .dash-card-header {
@@ -336,12 +349,16 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           align-items: center;
           justify-content: space-between;
           margin-bottom: 1rem;
+          width: 100%;
         }
 
         .dash-card-title {
           font-size: 0.95rem;
           font-weight: 800;
           color: #0F172A;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .activity-card {
@@ -354,10 +371,13 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           align-items: flex-end;
           gap: 8px;
           height: 120px;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .activity-bar-col {
           flex: 1;
+          min-width: 0;
           display: flex;
           flex-direction: column;
           align-items: center;

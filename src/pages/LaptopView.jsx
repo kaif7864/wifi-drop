@@ -592,7 +592,7 @@ export function LaptopView() {
           flex-direction: column;
           min-width: 0;
           height: 100vh;
-          width: calc(100% - 260px);
+          width: 100%;
           max-width: 100%;
           overflow-y: auto;
           overflow-x: hidden;
@@ -821,6 +821,10 @@ export function LaptopView() {
 
           .content-area {
             padding: 0.875rem 0.75rem 5.5rem; /* Extra bottom padding for mobile bottom bar */
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow-x: hidden;
           }
 
           .mobile-bottom-nav {
