@@ -8,6 +8,9 @@ export function playNotificationSound() {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
 
     const osc1 = ctx.createOscillator();
     const osc2 = ctx.createOscillator();

@@ -58,8 +58,14 @@ export function SettingsPage({ shop, sessionId }) {
         }
         if (s.language) setLanguage(s.language);
         if (s.autoMarkPrinted !== undefined) setAutoMarkPrinted(s.autoMarkPrinted);
-        if (s.notifEnabled !== undefined) setNotifEnabled(s.notifEnabled);
-        if (s.soundEnabled !== undefined) setSoundEnabled(s.soundEnabled);
+        if (s.notifEnabled !== undefined) {
+          setNotifEnabled(s.notifEnabled);
+          localStorage.setItem('wifidrop_notif_enabled', s.notifEnabled ? 'true' : 'false');
+        }
+        if (s.soundEnabled !== undefined) {
+          setSoundEnabled(s.soundEnabled);
+          localStorage.setItem('wifidrop_sound_enabled', s.soundEnabled ? 'true' : 'false');
+        }
       }
     } catch {}
   }
