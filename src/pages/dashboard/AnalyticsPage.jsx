@@ -5,6 +5,7 @@
 
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { getLast7DaysActivity } from '../../utils/activity';
 
 function MetricCard({ icon, label, value, sub, trend, color = '#4F46E5', bg = '#EEF2FF' }) {
   return (
@@ -47,20 +48,13 @@ function BarChart({ data, color = '#4F46E5' }) {
   );
 }
 
-export function AnalyticsPage({ files, texts }) {
+export function AnalyticsPage({ files, texts = [] }) {
   const now = Date.now();
 
-  // Last 7 days bar data
+  // Last 7 days bar data — synchronized with Dashboard Overview
   const last7Days = useMemo(() => {
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now - i * 86400000);
-      const label = d.toLocaleDateString('en', { weekday: 'short' });
-      const value = files.filter((f) => new Date(f.savedAt || f.createdAt).toDateString() === d.toDateString()).length;
-      days.push({ label, value });
-    }
-    return days;
-  }, [files]);
+    return getLast7DaysActivity(files, texts);
+  }, [files, texts]);
 
   // Last 4 weeks bar data
   const last4Weeks = useMemo(() => {

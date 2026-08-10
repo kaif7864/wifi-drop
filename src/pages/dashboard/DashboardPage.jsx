@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { getLast7DaysActivity } from '../../utils/activity';
 
 function StatCard({ icon, label, value, color = '#4F46E5', bg = '#EEF2FF', trend }) {
   return (
@@ -31,13 +32,14 @@ function StatCard({ icon, label, value, color = '#4F46E5', bg = '#EEF2FF', trend
   );
 }
 
-function ActivityBar({ day, pct }) {
+function ActivityBar({ day, pct, count }) {
   return (
     <div className="activity-bar-col">
       <div className="activity-bar-track">
         <div className="activity-bar-fill" style={{ height: `${pct}%` }} />
       </div>
       <span className="activity-bar-day">{day}</span>
+      <span className="activity-bar-count">{count}</span>
     </div>
   );
 }
@@ -83,23 +85,10 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
   const pendingPrint = useMemo(() => files.filter((f) => !f.printedStatus), [files]);
   const uniqueCustomers = useMemo(() => new Set(files.map((f) => f.customerId || 'anon')).size, [files]);
 
-  // Last 7 days activity (file count per day)
+  // Last 7 days activity (file + text count per day)
   const activityData = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const counts = new Array(7).fill(0);
-    const now = new Date();
-    files.forEach((f) => {
-      const d = new Date(f.savedAt || f.createdAt);
-      const diff = Math.floor((now - d) / 86400000);
-      if (diff >= 0 && diff < 7) counts[6 - diff]++;
-    });
-    const max = Math.max(...counts, 1);
-    return counts.map((c, i) => ({
-      day: days[(new Date(now - (6 - i) * 86400000)).getDay()],
-      pct: Math.round((c / max) * 100),
-      count: c,
-    }));
-  }, [files]);
+    return getLast7DaysActivity(files, texts);
+  }, [files, texts]);
 
   const recentItems = useMemo(() => {
     const f = files.map((x) => ({ ...x, _type: 'file', _time: new Date(x.savedAt || x.createdAt).getTime() }));
@@ -148,7 +137,7 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           </div>
           <div className="activity-chart">
             {activityData.map((d, i) => (
-              <ActivityBar key={i} day={d.day} pct={d.pct} />
+              <ActivityBar key={i} day={d.day} pct={d.pct} count={d.count} />
             ))}
           </div>
         </div>
