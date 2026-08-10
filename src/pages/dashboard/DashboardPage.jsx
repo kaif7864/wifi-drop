@@ -90,6 +90,31 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
     return getLast7DaysActivity(files, texts);
   }, [files, texts]);
 
+  const totalWeeklyActivity = useMemo(() => {
+    return activityData.reduce((acc, d) => acc + d.count, 0);
+  }, [activityData]);
+
+  const peakDayData = useMemo(() => {
+    if (!activityData.length) return null;
+    return [...activityData].sort((a, b) => b.count - a.count)[0];
+  }, [activityData]);
+
+  const topContentType = useMemo(() => {
+    if (!files.length && !texts.length) return 'None yet';
+    let pdfs = 0, images = 0, docs = 0;
+    files.forEach((f) => {
+      const name = (f.originalName || '').toLowerCase();
+      const mime = (f.mimeType || '').toLowerCase();
+      if (mime.includes('pdf') || name.endsWith('.pdf')) pdfs++;
+      else if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name)) images++;
+      else docs++;
+    });
+    if (pdfs >= images && pdfs >= docs && pdfs > 0) return `PDFs (${pdfs})`;
+    if (images >= pdfs && images >= docs && images > 0) return `Images (${images})`;
+    if (docs > 0) return `Office (${docs})`;
+    return `${texts.length} Notes`;
+  }, [files, texts]);
+
   const recentItems = useMemo(() => {
     const f = files.map((x) => ({ ...x, _type: 'file', _time: new Date(x.savedAt || x.createdAt).getTime() }));
     const t = texts.map((x) => ({ ...x, _type: 'text', _time: new Date(x.receivedAt || x.createdAt).getTime() }));
@@ -130,15 +155,41 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
 
       {/* Main Grid */}
       <div className="dashboard-grid">
-        {/* Activity Chart */}
+        {/* Activity Chart Card */}
         <div className="dash-card activity-card">
           <div className="dash-card-header">
             <h3 className="dash-card-title">📈 Activity — Last 7 Days</h3>
+            <span className="activity-total-chip">{totalWeeklyActivity} Transfers</span>
           </div>
           <div className="activity-chart">
             {activityData.map((d, i) => (
               <ActivityBar key={i} day={d.day} pct={d.pct} count={d.count} />
             ))}
+          </div>
+
+          {/* Activity Insights Strip — Covers bottom blank space */}
+          <div className="activity-insights-row">
+            <div className="insight-pill">
+              <span className="insight-icon">🔥</span>
+              <div>
+                <span className="insight-lbl">Peak Day</span>
+                <span className="insight-val">{peakDayData && peakDayData.count > 0 ? `${peakDayData.day} (${peakDayData.count})` : 'None'}</span>
+              </div>
+            </div>
+            <div className="insight-pill">
+              <span className="insight-icon">⚡</span>
+              <div>
+                <span className="insight-lbl">Daily Average</span>
+                <span className="insight-val">{(totalWeeklyActivity / 7).toFixed(1)} / day</span>
+              </div>
+            </div>
+            <div className="insight-pill">
+              <span className="insight-icon">📄</span>
+              <div>
+                <span className="insight-lbl">Top Content</span>
+                <span className="insight-val">{topContentType}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -430,15 +481,29 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
         .activity-card {
           grid-column: 1;
           grid-row: 1;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .activity-total-chip {
+          font-size: 0.72rem;
+          font-weight: 800;
+          color: #4F46E5;
+          background: #EEF2FF;
+          padding: 3px 10px;
+          border-radius: 999px;
+          border: 1px solid #C7D2FE;
+          flex-shrink: 0;
         }
 
         .activity-chart {
           display: flex;
           align-items: flex-end;
-          gap: 8px;
-          height: 120px;
+          gap: 10px;
+          height: 125px;
           width: 100%;
           box-sizing: border-box;
+          margin-bottom: 12px;
         }
 
         .activity-bar-col {
@@ -447,7 +512,7 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 6px;
+          gap: 4px;
           height: 100%;
         }
 
@@ -471,8 +536,56 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
 
         .activity-bar-day {
           font-size: 10px;
+          font-weight: 800;
+          color: #64748B;
+        }
+
+        .activity-bar-count {
+          font-size: 11px;
+          font-weight: 800;
+          color: #1E293B;
+        }
+
+        .activity-insights-row {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin-top: auto;
+          padding-top: 14px;
+          border-top: 1px solid #F1F5F9;
+        }
+
+        .insight-pill {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 12px;
+          padding: 8px 10px;
+        }
+
+        .insight-icon {
+          font-size: 1.1rem;
+          flex-shrink: 0;
+        }
+
+        .insight-lbl {
+          display: block;
+          font-size: 0.68rem;
           font-weight: 700;
-          color: #94A3B8;
+          color: #64748B;
+          line-height: 1.1;
+        }
+
+        .insight-val {
+          display: block;
+          font-size: 0.8rem;
+          font-weight: 800;
+          color: #0F172A;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .quick-actions-grid {
