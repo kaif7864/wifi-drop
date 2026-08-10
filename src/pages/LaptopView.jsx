@@ -26,6 +26,7 @@ import { QRManagementPage } from './dashboard/QRManagementPage';
 import { SettingsPage } from './dashboard/SettingsPage';
 import { NotificationContainer } from '../components/Notification';
 import { config } from '../config';
+import { playNotificationSound } from '../utils/audio';
 
 const PAGE_TITLES = {
   dashboard: '📊 Dashboard Overview',
@@ -111,6 +112,14 @@ export function LaptopView() {
     logout();
   }, [logout]);
 
+  // Request browser notification permission on mount if enabled
+  useEffect(() => {
+    const notifEnabled = localStorage.getItem('wifidrop_notif_enabled') !== 'false';
+    if (notifEnabled && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
   // Listen for real-time socket events
   useEffect(() => {
     if (!socket) return;
@@ -118,11 +127,28 @@ export function LaptopView() {
     const handleFileReceived = (fileData) => {
       const fileId = fileData.uuid || fileData.id || fileData._id;
       addReceivedFile(fileData);
+
+      const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
+      const notifEnabled = localStorage.getItem('wifidrop_notif_enabled') !== 'false';
+
+      if (soundEnabled) {
+        playNotificationSound();
+      }
+
+      if (notifEnabled && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`📥 New File: ${fileData.originalName || 'Received File'}`, {
+            body: `From: ${fileData.customerName || fileData.deviceName || 'Customer'}`,
+            icon: '/favicon.ico',
+          });
+        } catch {}
+      }
+
       addToast({
         dedupeKey: `file_${fileId || fileData.originalName}`,
         type: 'file',
         title: `📥 ${fileData.originalName}`,
-        message: `${fileData.deviceName || 'Mobile'} transferred a file`,
+        message: `${fileData.customerName || fileData.deviceName || 'Mobile'} transferred a file`,
         file: fileData,
       });
       // Backup: also re-fetch from server to catch any missed/mismatched socket events
@@ -132,10 +158,27 @@ export function LaptopView() {
     const handleTextReceived = (textData) => {
       const textId = textData.uuid || textData.id || textData._id;
       addReceivedText(textData);
+
+      const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
+      const notifEnabled = localStorage.getItem('wifidrop_notif_enabled') !== 'false';
+
+      if (soundEnabled) {
+        playNotificationSound();
+      }
+
+      if (notifEnabled && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`💬 Note from ${textData.customerName || textData.deviceName || 'Customer'}`, {
+            body: textData.text?.slice(0, 60),
+            icon: '/favicon.ico',
+          });
+        } catch {}
+      }
+
       addToast({
         dedupeKey: `text_${textId || textData.text?.slice(0, 20)}`,
         type: 'text',
-        title: `💬 Note from ${textData.deviceName || 'Mobile'}`,
+        title: `💬 Note from ${textData.customerName || textData.deviceName || 'Mobile'}`,
         message: textData.text?.slice(0, 60),
       });
       // Backup: also re-fetch from server
