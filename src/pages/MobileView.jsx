@@ -86,7 +86,7 @@ export function MobileView() {
   const [isP2pUploading, setIsP2pUploading] = useState(false);
   const [textStatus, setTextStatus] = useState(null); // null | 'success' | 'error'
   const isTempQrSession = Boolean(sessionId && sessionId.startsWith('temp_'));
-  const isViewPortalSession = isTempQrSession; // Strictly time-limited View-Only QRs created with expiry
+  const isViewPortalSession = Boolean(isTempQrSession || isViewOnlyParam);
 
   const [activeMode, setActiveMode] = useState(() => (isViewPortalSession ? 'view' : 'file')); // 'file' | 'text' | 'view'
   const [customerName, setCustomerName] = useState(() => {
