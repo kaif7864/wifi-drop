@@ -78,8 +78,9 @@ export function LaptopView() {
   const activeShopId = shop?.shopId || null;
   const targetSessionId = activeShopId ? null : guestSessionId;
 
-  // Track recent toast IDs to avoid duplicate toasts
+  // Track recent toast IDs and socket events to avoid duplicate alerts
   const recentToastIdsRef = useRef(new Map());
+  const recentEventsRef = useRef(new Map());
 
   const addToast = useCallback((toast) => {
     const dedupeKey = toast.dedupeKey || toast.file?.uuid || toast.file?.id || toast.file?._id || toast.title;
@@ -109,6 +110,7 @@ export function LaptopView() {
   const handleLogout = useCallback(() => {
     setToasts([]);
     recentToastIdsRef.current.clear();
+    recentEventsRef.current.clear();
     logout();
   }, [logout]);
 
@@ -125,7 +127,13 @@ export function LaptopView() {
     if (!socket) return;
 
     const handleFileReceived = (fileData) => {
-      const fileId = fileData.uuid || fileData.id || fileData._id;
+      const fileId = fileData.uuid || fileData.id || fileData._id || `${fileData.originalName}_${fileData.size}`;
+      const lastProcessed = recentEventsRef.current.get(`file_${fileId}`);
+      if (lastProcessed && Date.now() - lastProcessed < 10000) {
+        return; // Prevent duplicate notifications within 10 seconds
+      }
+      recentEventsRef.current.set(`file_${fileId}`, Date.now());
+
       addReceivedFile(fileData);
 
       const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
@@ -156,7 +164,13 @@ export function LaptopView() {
     };
 
     const handleTextReceived = (textData) => {
-      const textId = textData.uuid || textData.id || textData._id;
+      const textId = textData.uuid || textData.id || textData._id || `${textData.text?.slice(0, 15)}`;
+      const lastProcessed = recentEventsRef.current.get(`text_${textId}`);
+      if (lastProcessed && Date.now() - lastProcessed < 10000) {
+        return;
+      }
+      recentEventsRef.current.set(`text_${textId}`, Date.now());
+
       addReceivedText(textData);
 
       const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
