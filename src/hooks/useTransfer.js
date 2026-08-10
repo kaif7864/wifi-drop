@@ -83,14 +83,15 @@ export function useTransfer(shopId = null) {
   // ── Push a file received via socket ──────────────────────────────────────
   const addReceivedFile = useCallback((fileRecord) => {
     if (!fileRecord) return;
-    // Security check: only accept files matching current shop or guest session
-    if (shopId && shopId !== 'guest') {
-      if (fileRecord.shopId && fileRecord.shopId !== 'default' && fileRecord.shopId !== shopId) {
+    const currentShop = (shopId || '').toLowerCase().trim();
+    const recShop = (fileRecord.shopId || 'default').toLowerCase().trim();
+
+    if (currentShop && currentShop !== 'guest' && currentShop !== 'default') {
+      if (recShop && recShop !== 'default' && recShop !== currentShop) {
         return; // Ignore files from another shop
       }
-    } else {
-      // Guest mode: ignore any file belonging to a registered shop
-      if (fileRecord.shopId && fileRecord.shopId !== 'default') {
+    } else if (currentShop === 'guest' || !currentShop || currentShop === 'default') {
+      if (recShop && recShop !== 'default') {
         return;
       }
     }
@@ -107,12 +108,15 @@ export function useTransfer(shopId = null) {
   // ── Push a text received via socket ───────────────────────────────────────
   const addReceivedText = useCallback((textRecord) => {
     if (!textRecord) return;
-    if (shopId && shopId !== 'guest') {
-      if (textRecord.shopId && textRecord.shopId !== 'default' && textRecord.shopId !== shopId) {
+    const currentShop = (shopId || '').toLowerCase().trim();
+    const recShop = (textRecord.shopId || 'default').toLowerCase().trim();
+
+    if (currentShop && currentShop !== 'guest' && currentShop !== 'default') {
+      if (recShop && recShop !== 'default' && recShop !== currentShop) {
         return;
       }
-    } else {
-      if (textRecord.shopId && textRecord.shopId !== 'default') {
+    } else if (currentShop === 'guest' || !currentShop || currentShop === 'default') {
+      if (recShop && recShop !== 'default') {
         return;
       }
     }

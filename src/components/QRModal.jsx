@@ -1,7 +1,7 @@
 /**
  * client/src/components/QRModal.jsx
  * State-of-the-Art Interactive Glassmorphic QR Modal
- * Ultra-Modern UI with Dynamic QR Toggle (Upload ↔ Time-Limited View Portal), Standee Mode & Instant Sharing
+ * Ultra-Modern UI with Dynamic QR Toggle (Upload ↔ View Portal), Standee Mode & Instant Sharing
  */
 
 import { useEffect, useState } from 'react';
@@ -27,7 +27,6 @@ export function QRModal({
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState('qr'); // 'qr' | 'standee'
-  const [viewExpiry, setViewExpiry] = useState('4h');
 
   const effectiveCustId = customerId || targetCustomerId;
 
@@ -45,33 +44,14 @@ export function QRModal({
       setLoading(true);
       const targetShop = shopId || (sessionId && !sessionId.startsWith('wd_') && !sessionId.startsWith('temp_') ? sessionId : null);
 
+      const queryParts = [];
+      if (sessionId) queryParts.push(`session=${encodeURIComponent(sessionId)}`);
+      if (targetShop && targetShop !== 'default') queryParts.push(`shop=${encodeURIComponent(targetShop)}`);
+      if (effectiveCustId) queryParts.push(`customerId=${encodeURIComponent(effectiveCustId)}`);
+      if (qrPurpose === 'view') queryParts.push('view=only');
+      const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
       try {
-        let activeSessionId = sessionId;
-
-        // If creating a View-Only QR and not already a temp session, generate an expired-safe temp session
-        if (qrPurpose === 'view' && (!sessionId || !sessionId.startsWith('temp_'))) {
-          try {
-            const tempRes = await axios.post(`${config.serverUrl}/api/qr/temp`, {
-              customerName: shopName || effectiveCustId || 'Customer View',
-              expiry: viewExpiry,
-              shopId: targetShop || 'default',
-              mode: 'view_only',
-              isViewOnly: true,
-              targetCustomerId: effectiveCustId || null,
-            });
-            if (tempRes.data?.qr?.qrId) {
-              activeSessionId = tempRes.data.qr.qrId;
-            }
-          } catch {}
-        }
-
-        const queryParts = [];
-        if (activeSessionId) queryParts.push(`session=${encodeURIComponent(activeSessionId)}`);
-        if (targetShop && targetShop !== 'default') queryParts.push(`shop=${encodeURIComponent(targetShop)}`);
-        if (effectiveCustId) queryParts.push(`customerId=${encodeURIComponent(effectiveCustId)}`);
-        if (qrPurpose === 'view') queryParts.push('view=only');
-        const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-
         // 1. Fetch real Wi-Fi IP address URL from backend /api/qr
         const res = await axios.get(`${config.serverUrl}/api/qr${query}`);
         if (res.data && res.data.url) {
@@ -90,20 +70,13 @@ export function QRModal({
 
       // 2. Fallback only if backend /api/qr is unreachable
       const host = window.location.origin;
-      const fallbackQueryParts = [];
-      if (sessionId) fallbackQueryParts.push(`session=${encodeURIComponent(sessionId)}`);
-      if (targetShop && targetShop !== 'default') fallbackQueryParts.push(`shop=${encodeURIComponent(targetShop)}`);
-      if (effectiveCustId) fallbackQueryParts.push(`customerId=${encodeURIComponent(effectiveCustId)}`);
-      if (qrPurpose === 'view') fallbackQueryParts.push('view=only');
-      const fallbackQuery = fallbackQueryParts.length > 0 ? `?${fallbackQueryParts.join('&')}` : '';
-
-      const fallbackUrl = `${host}/mobile${fallbackQuery}`;
+      const fallbackUrl = `${host}/mobile${query}`;
       const fallbackQr = await generateClientQR(fallbackUrl);
       setQrData({ qrDataUrl: fallbackQr, url: fallbackUrl });
       setLoading(false);
     };
     fetchQR();
-  }, [isOpen, sessionId, shopId, effectiveCustId, qrPurpose, viewExpiry]);
+  }, [isOpen, sessionId, shopId, effectiveCustId, qrPurpose]);
 
   const handleCopyLink = async () => {
     if (qrData?.url) {
@@ -139,14 +112,14 @@ export function QRModal({
               <div className="min-w-0">
                 <h3 className="modal-title">
                   {isView
-                    ? 'Time-Limited View Portal QR'
+                    ? 'Customer View Portal QR'
                     : effectiveCustId
                     ? 'Folder Upload QR'
                     : 'Shop Connect QR'}
                 </h3>
                 <p className="modal-subtitle">
                   {isView
-                    ? `Expires after ${viewExpiry} • ${shopName || effectiveCustId || 'Shop'}`
+                    ? `Live status & download portal • ${shopName || effectiveCustId || 'Shop'}`
                     : effectiveCustId
                     ? `Direct upload into: ${shopName || effectiveCustId}`
                     : `Permanent Standee • ${shopName || 'WiFi Drop Transfer'}`}
@@ -185,7 +158,7 @@ export function QRModal({
                   onClick={() => setQrPurpose('upload')}
                 >
                   <span className="btn-icon-label">📤</span>
-                  <span>Upload QR (No History)</span>
+                  <span>Upload QR</span>
                 </button>
                 <button
                   type="button"
@@ -193,28 +166,9 @@ export function QRModal({
                   onClick={() => setQrPurpose('view')}
                 >
                   <span className="btn-icon-label">👁️</span>
-                  <span>View-Only QR (Expires)</span>
+                  <span>View-Only QR</span>
                 </button>
               </div>
-
-              {/* Expiry Selector when in View Mode */}
-              {isView && (
-                <div className="view-expiry-selector flex items-center justify-between gap-2 w-full">
-                  <span className="expiry-label">⏱️ Link Expiry Time:</span>
-                  <div className="flex items-center gap-1.5">
-                    {['1h', '4h', '24h', '72h'].map((exp) => (
-                      <button
-                        key={exp}
-                        type="button"
-                        className={`expiry-chip ${viewExpiry === exp ? 'active-exp' : ''}`}
-                        onClick={() => setViewExpiry(exp)}
-                      >
-                        {exp === '1h' ? '1 Hour' : exp === '4h' ? '4 Hours' : exp === '24h' ? '1 Day' : '3 Days'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* QR Image Container */}
               <div className="qr-display-box">
@@ -234,10 +188,10 @@ export function QRModal({
                       <span className="pill-dot"></span>
                       <span>
                         {isView
-                          ? `👁️ Time-Limited View Portal (${viewExpiry})`
+                          ? '👁️ Customer View Portal (Live)'
                           : effectiveCustId
                           ? `📂 Upload to: ${shopName || effectiveCustId}`
-                          : '⚡ Counter Upload Mode (Secure)'}
+                          : '⚡ Counter Upload Mode'}
                       </span>
                     </div>
                   </div>
@@ -249,10 +203,10 @@ export function QRModal({
               {/* Instructional Text */}
               <p className="qr-helper-text">
                 {isView
-                  ? `Customer can view their files & print status for ${viewExpiry}. After that, access expires automatically.`
+                  ? 'Customer can scan to view their recent uploads & live print status.'
                   : effectiveCustId
-                  ? 'Customer scans to upload files into this folder. Past historical files are hidden.'
-                  : 'Customer scans at the counter to upload files. Past files will NOT be accessible.'}
+                  ? 'Customer scans to upload files directly into this folder.'
+                  : 'Customer scans at counter to upload documents & track recent print status.'}
               </p>
 
               {/* URL & Instant Action Bar */}
@@ -277,7 +231,7 @@ export function QRModal({
                     ) : (
                       <>
                         <span>{isView ? '👁️' : '📋'}</span>
-                        <span>{isView ? `Copy View Link (${viewExpiry})` : 'Copy Upload Link'}</span>
+                        <span>{isView ? 'Copy View-Only Link' : 'Copy Upload Link'}</span>
                       </>
                     )}
                   </button>
@@ -452,37 +406,6 @@ export function QRModal({
             background: #FFFFFF;
             color: #7C3AED;
             box-shadow: 0 4px 12px rgba(124, 58, 237, 0.14), 0 1px 3px rgba(0, 0, 0, 0.05);
-          }
-
-          .view-expiry-selector {
-            background: #FAF5FF;
-            border: 1px solid #E9D5FF;
-            border-radius: 12px;
-            padding: 6px 10px;
-          }
-
-          .expiry-label {
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: #7C3AED;
-          }
-
-          .expiry-chip {
-            font-size: 0.68rem;
-            font-weight: 700;
-            padding: 3px 7px;
-            border-radius: 6px;
-            border: 1px solid transparent;
-            background: transparent;
-            color: #6B21A8;
-            cursor: pointer;
-            transition: all 0.15s ease;
-          }
-
-          .expiry-chip.active-exp {
-            background: #7C3AED;
-            color: #FFFFFF;
-            box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
           }
 
           .qr-display-box {

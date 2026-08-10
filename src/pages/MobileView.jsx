@@ -84,15 +84,38 @@ export function MobileView() {
   const [uploadStatus, setUploadStatus] = useState(null); // null | 'success' | 'error'
   const [p2pProgress, setP2pProgress] = useState(0);
   const [isP2pUploading, setIsP2pUploading] = useState(false);
-  const [textStatus, setTextStatus] = useState(null);
-  const [activeMode, setActiveMode] = useState(() => (isViewOnlyParam ? 'view' : 'file')); // 'file' | 'text' | 'view'
+  const [textStatus, setTextStatus] = useState(null); // null | 'success' | 'error'
+  const isTempQrSession = Boolean(sessionId && sessionId.startsWith('temp_'));
+  const isViewPortalSession = isTempQrSession; // Strictly time-limited View-Only QRs created with expiry
+
+  const [activeMode, setActiveMode] = useState(() => (isViewPortalSession ? 'view' : 'file')); // 'file' | 'text' | 'view'
   const [customerName, setCustomerName] = useState(() => {
     try { return localStorage.getItem('wifidrop_customer_name') || ''; } catch { return ''; }
   });
 
-  const [recentUploads, setRecentUploads] = useState([]);
+  const sessionUploadsKey = useMemo(
+    () => `wifidrop_session_uploads_${(sessionId || shopId || 'default').toLowerCase()}`,
+    [sessionId, shopId]
+  );
+
+  const [recentUploads, setRecentUploads] = useState(() => {
+    try {
+      const key = `wifidrop_session_uploads_${(sessionId || shopId || 'default').toLowerCase()}`;
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Keep sessionStorage in sync with recent session uploads
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(sessionUploadsKey, JSON.stringify(recentUploads));
+    } catch {}
+  }, [recentUploads, sessionUploadsKey]);
+
   const [sessionExpired, setSessionExpired] = useState(false);
-  const isViewPortalSession = Boolean(isViewOnlyParam || (sessionId && sessionId.startsWith('temp_')));
 
   // Socket listener for live print status updates in recent session uploads
   useEffect(() => {
@@ -102,7 +125,11 @@ export function MobileView() {
       const status = typeof data.printedStatus === 'boolean' ? data.printedStatus : true;
       if (targetId) {
         setRecentUploads((prev) =>
-          prev.map((f) => ((f.uuid === targetId || f.id === targetId || f._id === targetId) ? { ...f, printedStatus: status } : f))
+          prev.map((f) =>
+            ((f.uuid === targetId || f.id === targetId || f._id === targetId || f.fileId === targetId)
+              ? { ...f, printedStatus: status }
+              : f)
+          )
         );
       }
     };
