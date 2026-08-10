@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { config } from '../../config';
+import { toast } from '../../context/ToastContext';
 import {
   getPendingBillItems,
   removePendingBillItem,
@@ -349,11 +350,11 @@ export function BillingPage({ files = [], texts = [], shop, sessionId }) {
 
   async function saveBill() {
     if (!customer.trim()) {
-      alert('Please enter or select a customer name');
+      toast.warning('Please enter or select a customer name');
       return;
     }
     if (items.length === 0) {
-      alert('Please add at least 1 item to the bill');
+      toast.warning('Please add at least 1 item to the bill');
       return;
     }
 
@@ -387,13 +388,13 @@ export function BillingPage({ files = [], texts = [], shop, sessionId }) {
         setActiveTab('invoices');
       }
     } catch (err) {
-      alert('Error saving invoice: ' + (err.response?.data?.error || err.message));
+      toast.error('Error saving invoice: ' + (err.response?.data?.error || err.message));
     }
   }
 
   function printCurrentBill() {
     if (items.length === 0) {
-      alert('Please add at least one item to print receipt');
+      toast.warning('Please add at least one item to print receipt');
       return;
     }
     const receiptData = {
@@ -419,7 +420,7 @@ export function BillingPage({ files = [], texts = [], shop, sessionId }) {
 
   function printCurrentBillA4() {
     if (items.length === 0) {
-      alert('Please add at least one item to print invoice');
+      toast.warning('Please add at least one item to print invoice');
       return;
     }
     const receiptData = {
@@ -735,13 +736,13 @@ export function BillingPage({ files = [], texts = [], shop, sessionId }) {
       await axios.delete(`${config.serverUrl}/api/billing/invoices/${idOrNo}`);
       setInvoices((prev) => prev.filter((i) => i._id !== idOrNo && i.no !== idOrNo));
     } catch {
-      alert('Failed to delete invoice');
+      toast.error('Failed to delete invoice');
     }
   }
 
   function exportCSV() {
     if (invoices.length === 0) {
-      alert('No invoices available to export');
+      toast.warning('No invoices available to export');
       return;
     }
     const headers = ['Invoice No', 'Date', 'Customer Name', 'Subtotal', 'GST', 'Amount', 'Payment Mode', 'Status'];

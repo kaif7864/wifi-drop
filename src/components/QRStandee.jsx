@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { generateClientQR } from '../utils/qr';
+import { toast } from '../context/ToastContext';
 
 export function QRStandee({ shopName, shopId, sessionId, mobileUrl, qrCodeUrl, qrDataUrl }) {
   const [localQr, setLocalQr] = useState(qrCodeUrl || qrDataUrl || null);
@@ -199,7 +200,7 @@ export function QRStandee({ shopName, shopId, sessionId, mobileUrl, qrCodeUrl, q
           className="standee-action-btn secondary"
           onClick={() => {
             navigator.clipboard.writeText(displayUrl);
-            alert('Standee link copied to clipboard!');
+            toast.copy('Standee link copied to clipboard!');
           }}
         >
           <span>🔗</span> Copy Link

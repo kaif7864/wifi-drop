@@ -11,7 +11,14 @@ const BASE_URL = config.serverUrl;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
 export function useTransfer(shopId = null) {
-  const isShopOwner = !!(shopId && shopId !== 'guest' && shopId !== 'default' && !shopId.startsWith('wd_'));
+  const isShopOwner = !!(
+    shopId &&
+    shopId !== 'guest' &&
+    shopId !== 'default' &&
+    !shopId.startsWith('wd_') &&
+    !shopId.startsWith('temp_') &&
+    localStorage.getItem('wifidrop_token')
+  );
   const cacheKey = isShopOwner ? `wifidrop_files_cache_${shopId}` : null;
 
   const [files, setFiles] = useState(() => {

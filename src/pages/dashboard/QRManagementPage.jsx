@@ -9,13 +9,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import axios from 'axios';
 import { QRModal } from '../../components/QRModal';
 import { config } from '../../config';
+import { toast } from '../../context/ToastContext';
 
 const EXPIRY_OPTIONS = [
-  { label: '30 Minutes', value: '30m', ms: 30 * 60000 },
-  { label: '1 Hour', value: '1h', ms: 3600000 },
-  { label: '4 Hours', value: '4h', ms: 4 * 3600000 },
-  { label: '1 Day', value: '24h', ms: 86400000 },
-  { label: '3 Days', value: '72h', ms: 3 * 86400000 },
+  { label: '30m', value: '30m', ms: 30 * 60000 },
+  { label: '1h', value: '1h', ms: 3600000 },
+  { label: '4h', value: '4h', ms: 4 * 3600000 },
+  { label: '1d', value: '24h', ms: 86400000 },
+  { label: '3d', value: '72h', ms: 3 * 86400000 },
 ];
 
 function QRTypeCard({ icon, title, desc, badge, children, color = '#4F46E5' }) {
@@ -236,7 +237,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
   async function generateTempQr() {
     const targetFolder = customerFolders.find((c) => c.id === tempCustName || c.name === tempCustName);
     const targetName = targetFolder ? targetFolder.name : tempCustName;
-    if (!targetName.trim()) { alert('Please select a customer folder or enter customer token'); return; }
+    if (!targetName.trim()) { toast.warning('Please select a customer folder or enter customer token'); return; }
     try {
       const res = await axios.post(`${config.serverUrl}/api/qr/temp`, {
         customerName: targetName.trim(),
@@ -254,14 +255,14 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         setTempCustName('');
       }
     } catch (err) {
-      alert('Error creating temp QR: ' + (err.response?.data?.error || err.message));
+      toast.error('Error creating temp QR: ' + (err.response?.data?.error || err.message));
     }
   }
 
   async function generateViewOnlyQr() {
     const targetFolder = customerFolders.find((c) => c.id === viewCustFolderId);
     if (!targetFolder && !viewCustFolderId) {
-      alert('Please select a customer folder');
+      toast.warning('Please select a customer folder');
       return;
     }
     const targetName = targetFolder ? targetFolder.name : viewCustFolderId;
@@ -286,12 +287,12 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         setViewQrOpen(true);
       }
     } catch (err) {
-      alert('Error creating View-Only QR: ' + (err.response?.data?.error || err.message));
+      toast.error('Error creating View-Only QR: ' + (err.response?.data?.error || err.message));
     }
   }
 
   function openFolderQr() {
-    if (!folderCustId) { alert('Please select a customer folder'); return; }
+    if (!folderCustId) { toast.warning('Please select a customer folder'); return; }
     setFolderQrOpen(true);
   }
 
@@ -300,7 +301,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
       await axios.post(`${config.serverUrl}/api/qr/temp/revoke`, { qrId });
       setTempQrs((prev) => prev.map((q) => (q.qrId === qrId || q.id === qrId) ? { ...q, active: false } : q));
     } catch {
-      alert('Failed to revoke Temp QR');
+      toast.error('Failed to revoke Temp QR');
     }
   }
 
@@ -403,7 +404,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                 const shopPart = shopId ? `&shop=${encodeURIComponent(shopId)}` : '';
                 const url = `${window.location.origin}/mobile?session=${encodeURIComponent(sessionId)}${shopPart}`;
                 navigator.clipboard.writeText(url);
-                alert('Permanent link copied!');
+                toast.copy('Permanent link copied!');
               }}
             >
               🔗 Copy Link
@@ -645,7 +646,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                                 title="Copy Token ID"
                                 onClick={() => {
                                   navigator.clipboard.writeText(targetId);
-                                  alert('Token ID copied!');
+                                  toast.copy('Token ID copied!');
                                 }}
                               >
                                 📋
@@ -700,7 +701,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                                       const viewPart = isViewOnly ? '&view=only' : '';
                                       const url = `${window.location.origin}/mobile?session=${encodeURIComponent(targetId)}${shopPart}${custPart}${viewPart}`;
                                       navigator.clipboard.writeText(url);
-                                      alert('Link copied to clipboard!');
+                                      toast.copy('Link copied to clipboard!');
                                     }}
                                   >
                                     🔗 Copy Link
@@ -778,7 +779,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                               className="btn-copy-token"
                               onClick={() => {
                                 navigator.clipboard.writeText(targetId);
-                                alert('Token copied!');
+                                toast.copy('Token copied!');
                               }}
                             >
                               📋
@@ -816,7 +817,7 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
                                 const viewPart = isViewOnly ? '&view=only' : '';
                                 const url = `${window.location.origin}/mobile?session=${encodeURIComponent(targetId)}${shopPart}${custPart}${viewPart}`;
                                 navigator.clipboard.writeText(url);
-                                alert('Link copied to clipboard!');
+                                toast.copy('Link copied to clipboard!');
                               }}
                             >
                               🔗 Copy Link
@@ -901,22 +902,22 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         .qr-management-page { display: flex; flex-direction: column; gap: 1.5rem; width: 100%; }
         .qr-page-header { display: flex; align-items: center; justify-content: space-between; }
         .qr-count-badge { font-size: 0.8rem; font-weight: 700; padding: 6px 14px; border-radius: 999px; background: #ECFDF5; color: #059669; border: 1px solid #D1FAE5; }
-        .qr-types-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
-        .qr-type-card { background: white; border: 1px solid #E2E8F0; border-radius: 20px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 1rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        .qr-types-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; width: 100%; }
+        .qr-type-card { background: white; border: 1px solid #E2E8F0; border-radius: 18px; padding: 1.2rem 1.1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 0.85rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; min-width: 0; }
         .qr-type-card:hover { border-color: var(--qc); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
-        .qr-type-header { display: flex; align-items: flex-start; gap: 12px; }
-        .qr-type-icon-wrap { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .qr-type-title { font-size: 1rem; font-weight: 900; color: #0F172A; }
-        .qr-type-desc { font-size: 0.78rem; color: #64748B; margin-top: 3px; line-height: 1.5; }
-        .qr-badge { font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
-        .qr-type-body { display: flex; flex-direction: column; gap: 0.75rem; flex: 1; }
-        .qr-info-text { font-size: 0.8rem; color: #64748B; line-height: 1.6; background: #F8FAFC; padding: 10px 12px; border-radius: 10px; border: 1px solid #F1F5F9; }
-        .qr-session-id { display: flex; align-items: center; gap: 8px; background: #F8FAFC; padding: 8px 12px; border-radius: 8px; border: 1px solid #F1F5F9; }
-        .qr-session-label { font-size: 0.75rem; font-weight: 700; color: #64748B; }
-        .qr-session-val { font-size: 0.75rem; color: #4F46E5; }
-        .qr-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
-        .temp-form { display: flex; flex-direction: column; gap: 8px; }
-        .form-label { display: block; font-size: 0.78rem; font-weight: 700; color: #374151; margin-bottom: 4px; }
+        .qr-type-header { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+        .qr-type-icon-wrap { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .qr-type-title { font-size: 0.92rem; font-weight: 900; color: #0F172A; line-height: 1.25; }
+        .qr-type-desc { font-size: 0.72rem; color: #64748B; margin-top: 2px; line-height: 1.4; }
+        .qr-badge { font-size: 0.64rem; font-weight: 800; padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+        .qr-type-body { display: flex; flex-direction: column; gap: 0.65rem; flex: 1; min-width: 0; }
+        .qr-info-text { font-size: 0.75rem; color: #64748B; line-height: 1.5; background: #F8FAFC; padding: 8px 10px; border-radius: 10px; border: 1px solid #F1F5F9; }
+        .qr-session-id { display: flex; align-items: center; gap: 8px; background: #F8FAFC; padding: 7px 10px; border-radius: 8px; border: 1px solid #F1F5F9; }
+        .qr-session-label { font-size: 0.72rem; font-weight: 700; color: #64748B; }
+        .qr-session-val { font-size: 0.72rem; color: #4F46E5; word-break: break-all; }
+        .qr-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 6px; }
+        .temp-form { display: flex; flex-direction: column; gap: 6px; }
+        .form-label { display: block; font-size: 0.75rem; font-weight: 700; color: #374151; margin-bottom: 3px; }
 
         /* ── Custom Folder Select Dropdown ── */
         .custom-select-wrap {
@@ -1115,23 +1116,23 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
         /* ── Expiry Segmented Pills ── */
         .expiry-segmented-group {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 4px;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 2px;
           background: #F8FAFC;
           border: 1px solid #E2E8F0;
-          padding: 3px;
-          border-radius: 12px;
+          padding: 2px;
+          border-radius: 10px;
           box-sizing: border-box;
           width: 100%;
         }
 
         .expiry-pill-btn {
-          padding: 6px 4px;
-          border-radius: 8px;
+          padding: 5px 2px;
+          border-radius: 6px;
           border: 1px solid transparent;
           background: transparent;
           color: #64748B;
-          font-size: 0.76rem;
+          font-size: 0.68rem;
           font-weight: 700;
           cursor: pointer;
           transition: all 0.15s ease;
@@ -1149,6 +1150,20 @@ export function QRManagementPage({ sessionId, shop, files = [] }) {
           color: #4F46E5;
           border-color: #CBD5E1;
           box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        @media (max-width: 1280px) {
+          .qr-types-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .qr-types-grid {
+            grid-template-columns: 1fr;
+            gap: 0.85rem;
+          }
         }
 
         /* ── QR History Toolbar & Tabs ── */

@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { config } from '../../config';
 import { navigate } from '../../App';
+import { toast } from '../../context/ToastContext';
 
 export function SettingsPage({ shop, sessionId }) {
   const [shopName, setShopName] = useState(shop?.shopName || '');
@@ -91,7 +92,7 @@ export function SettingsPage({ shop, sessionId }) {
       setSavedMsg('✅ All settings saved to backend successfully!');
       setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
-      alert('Failed to save settings: ' + (err.response?.data?.error || err.message));
+      toast.error('Failed to save settings: ' + (err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }

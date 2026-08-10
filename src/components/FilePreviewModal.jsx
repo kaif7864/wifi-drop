@@ -1,11 +1,15 @@
 /**
  * client/src/components/FilePreviewModal.jsx
  * Light Theme Responsive Modal with In-App Inline PDF, Image, Video & Audio Previews
+ * Mobile: PDF via <object> embed + download fallback; Bottom-sheet slide-up on mobile
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { config } from '../config';
+import { PdfCanvasViewer } from './PdfCanvasViewer';
+
+const isMobile = () => /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
 
 export function FilePreviewModal({ file, onClose }) {
   if (!file) return null;
@@ -18,6 +22,7 @@ export function FilePreviewModal({ file, onClose }) {
   const isPdf = mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf');
   const isVideo = mime.startsWith('video/');
   const isAudio = mime.startsWith('audio/');
+  const mobile = isMobile();
 
   const getFullUrl = (urlStr) => {
     if (!urlStr) return '';
@@ -50,13 +55,13 @@ export function FilePreviewModal({ file, onClose }) {
 
   return createPortal(
     <AnimatePresence>
-      <div className="preview-modal-overlay" onClick={onClose}>
+      <div className={`preview-modal-overlay ${mobile ? 'preview-mobile' : ''}`} onClick={onClose}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          transition={{ duration: 0.2 }}
-          className="preview-modal-container"
+          initial={mobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.95, y: 10 }}
+          animate={mobile ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+          exit={mobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.95, y: 10 }}
+          transition={{ duration: 0.22 }}
+          className={`preview-modal-container ${mobile ? 'preview-modal-mobile' : ''}`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -75,17 +80,19 @@ export function FilePreviewModal({ file, onClose }) {
               )}
             </div>
             <div className="preview-modal-actions">
-              <button
-                onClick={handleOpenInNewTab}
-                className="btn-modal-action btn-open-tab"
-              >
-                Open ↗
-              </button>
+              {!mobile && (
+                <button
+                  onClick={handleOpenInNewTab}
+                  className="btn-modal-action btn-open-tab"
+                >
+                  Open ↗
+                </button>
+              )}
               <button
                 onClick={handleDownload}
                 className="btn-modal-action btn-download-action"
               >
-                Download ⬇
+                ⬇ Download
               </button>
               <button
                 onClick={onClose}
@@ -108,11 +115,7 @@ export function FilePreviewModal({ file, onClose }) {
             )}
 
             {isPdf && (
-              <iframe
-                src={`${previewUrl}#toolbar=1&navpanes=0`}
-                title={name}
-                className="preview-iframe-element"
-              />
+              <PdfCanvasViewer url={previewUrl} name={name} />
             )}
 
             {isVideo && (
@@ -131,6 +134,33 @@ export function FilePreviewModal({ file, onClose }) {
                 className="preview-audio-element"
                 autoPlay
               />
+            )}
+
+            {/* Unsupported file type */}
+            {!isImage && !isPdf && !isVideo && !isAudio && (
+              <div className="pdf-mobile-fallback">
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📁</div>
+                <p style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A', marginBottom: '6px' }}>{name}</p>
+                <p style={{ fontSize: '0.78rem', color: '#64748B', marginBottom: '1.5rem' }}>
+                  Preview not available for this file type.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  style={{
+                    background: '#4F46E5',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '12px 24px',
+                    fontWeight: 800,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⬇ Download File
+                </button>
+              </div>
             )}
           </div>
         </motion.div>
@@ -151,6 +181,11 @@ export function FilePreviewModal({ file, onClose }) {
             padding: 1rem;
           }
 
+          .preview-modal-overlay.preview-mobile {
+            align-items: flex-end;
+            padding: max(20px, env(safe-area-inset-top, 20px)) 0 0 0;
+          }
+
           .preview-modal-container {
             background: #ffffff;
             border-radius: 20px;
@@ -164,14 +199,23 @@ export function FilePreviewModal({ file, onClose }) {
             border: 1px solid #E2E8F0;
           }
 
+          .preview-modal-mobile {
+            max-width: 100%;
+            max-height: calc(100dvh - 60px);
+            height: calc(100dvh - 60px);
+            border-radius: 20px 20px 0 0;
+            border: none;
+          }
+
           .preview-modal-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 1rem 1.25rem;
+            padding: 0.875rem 1.25rem;
             border-bottom: 1px solid #E2E8F0;
             background: #F8FAFC;
             gap: 12px;
+            flex-shrink: 0;
           }
 
           .preview-modal-info {
@@ -236,18 +280,19 @@ export function FilePreviewModal({ file, onClose }) {
           }
 
           .btn-modal-close {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            border: 1px solid #CBD5E1;
-            background: #F1F5F9;
-            color: #64748B;
-            font-size: 14px;
-            font-weight: 800;
+            border: 1.5px solid #FCA5A5;
+            background: #FEF2F2;
+            color: #DC2626;
+            font-size: 16px;
+            font-weight: 900;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
           }
 
           .preview-modal-body {
@@ -256,8 +301,8 @@ export function FilePreviewModal({ file, onClose }) {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1.25rem;
-            min-height: 380px;
+            padding: 1rem;
+            min-height: 300px;
             background: #F1F5F9;
           }
 
@@ -288,15 +333,26 @@ export function FilePreviewModal({ file, onClose }) {
             max-width: 480px;
           }
 
+          .pdf-mobile-fallback {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1.5rem;
+            text-align: center;
+            width: 100%;
+          }
+
           /* ── Mobile Responsive Breakpoints ── */
           @media (max-width: 640px) {
             .preview-modal-overlay {
-              padding: 0.5rem;
+              padding: max(24px, env(safe-area-inset-top, 24px)) 0 0 0;
             }
 
             .preview-modal-container {
-              max-height: 94vh;
-              border-radius: 16px;
+              max-height: calc(100dvh - 64px);
+              height: calc(100dvh - 64px);
+              border-radius: 20px 20px 0 0;
             }
 
             .preview-modal-header {
@@ -306,22 +362,22 @@ export function FilePreviewModal({ file, onClose }) {
 
             .preview-modal-name {
               font-size: 0.82rem;
-              max-width: 130px;
+              max-width: 140px;
             }
 
             .btn-modal-action {
-              padding: 5px 8px;
-              font-size: 0.72rem;
+              padding: 6px 10px;
+              font-size: 0.74rem;
             }
 
             .preview-modal-body {
-              padding: 0.75rem;
+              padding: 0.5rem;
               min-height: 240px;
             }
 
             .preview-iframe-element, .preview-img-element, .preview-video-element {
-              height: 60vh;
-              max-height: 60vh;
+              height: 65vh;
+              max-height: 65vh;
             }
           }
         `}</style>
@@ -330,3 +386,4 @@ export function FilePreviewModal({ file, onClose }) {
     document.body
   );
 }
+

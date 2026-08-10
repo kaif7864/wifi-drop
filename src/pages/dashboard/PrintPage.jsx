@@ -8,6 +8,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { config } from '../../config';
+import { toast } from '../../context/ToastContext';
 
 import { isFileInBill, toggleFileInBill } from '../../utils/billManager';
 import { FilePreviewModal } from '../../components/FilePreviewModal';
@@ -102,7 +103,7 @@ export function PrintPage({ files, onTogglePrint, shop }) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch {
-      alert('Failed to save printer settings');
+      toast.error('Failed to save printer settings');
     }
   }
 

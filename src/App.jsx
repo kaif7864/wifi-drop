@@ -93,10 +93,14 @@ function AppInner() {
   );
 }
 
+import { ToastProvider } from './context/ToastContext';
+
 export default function App() {
   return (
     <AuthProvider>
-      <AppInner />
+      <ToastProvider>
+        <AppInner />
+      </ToastProvider>
     </AuthProvider>
   );
 }

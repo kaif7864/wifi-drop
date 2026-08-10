@@ -11,6 +11,7 @@ import { config } from '../../config';
 import { ConfirmDeleteFolderModal } from '../../components/ConfirmDeleteFolderModal';
 import { FilePreviewModal } from '../../components/FilePreviewModal';
 import { QRModal } from '../../components/QRModal';
+import { toast } from '../../context/ToastContext';
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -103,7 +104,7 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder, shop 
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (err) {
-      alert('Error updating nickname: ' + (err.response?.data?.error || err.message));
+      toast.error('Error updating nickname: ' + (err.response?.data?.error || err.message));
     } finally {
       setSavingNick(false);
     }

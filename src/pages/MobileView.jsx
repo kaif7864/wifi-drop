@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useWebRTC } from '../hooks/useWebRTC';
@@ -12,6 +13,7 @@ import { ProgressBar } from '../components/ProgressBar';
 import { getHardwareFingerprint } from '../utils/fingerprint';
 import { stageUploadInQueue, getStagedQueue, clearStagedItem } from '../utils/offlineQueue';
 import { config } from '../config';
+import { PdfCanvasViewer } from '../components/PdfCanvasViewer';
 
 const DEVICE_NAME_KEY = 'wifidrop_device_name';
 
@@ -85,8 +87,9 @@ export function MobileView() {
   const [p2pProgress, setP2pProgress] = useState(0);
   const [isP2pUploading, setIsP2pUploading] = useState(false);
   const [textStatus, setTextStatus] = useState(null); // null | 'success' | 'error'
+  const [previewModal, setPreviewModal] = useState(null); // { url, name, isPdf, isImg }
   const isTempQrSession = Boolean(sessionId && sessionId.startsWith('temp_'));
-  const isViewPortalSession = Boolean(isTempQrSession || isViewOnlyParam);
+  const isViewPortalSession = Boolean(isViewOnlyParam);
 
   const [activeMode, setActiveMode] = useState(() => (isViewPortalSession ? 'view' : 'file')); // 'file' | 'text' | 'view'
   const [customerName, setCustomerName] = useState(() => {
@@ -174,6 +177,23 @@ export function MobileView() {
       return () => clearInterval(interval);
     }
   }, [shopId, sessionId, effectiveCustomerId, fetchHistory, isViewPortalSession]);
+
+  // Check temp QR session status / expiration on mount
+  useEffect(() => {
+    if (isTempQrSession && sessionId) {
+      axios.get(`${config.serverUrl}/api/files?session=${sessionId}`)
+        .then((res) => {
+          if (res.data?.expired) {
+            setSessionExpired(true);
+          }
+        })
+        .catch((err) => {
+          if (err.response?.status === 403 || err.response?.status === 404 || err.response?.data?.expired) {
+            setSessionExpired(true);
+          }
+        });
+    }
+  }, [isTempQrSession, sessionId]);
 
   const handleNameChange = (e) => {
     const val = e.target.value;
@@ -386,6 +406,57 @@ export function MobileView() {
   const activeProgress = isP2pUploading ? p2pProgress : uploadProgress;
   const isCurrentlyTransferring = uploading || isP2pUploading;
 
+  // ── Compute strictly filtered files for this customer/session ──────────────
+  const customerFiles = useMemo(() => {
+    if (sessionExpired) return [];
+
+    // Case A: Temp QR Session (temp_xxx) or Specific Customer View Link (targetCustomerId)
+    if (isTempQrSession || (isViewOnlyParam && targetCustomerId)) {
+      const targetId = (targetCustomerId || '').toLowerCase().trim();
+      const targetName = (customerName || '').toLowerCase().trim();
+
+      return (files || []).filter((f) => {
+        if (!f) return false;
+        if (isTempQrSession && f.sessionId === sessionId) return true;
+        if (targetId && (f.customerId?.toLowerCase() === targetId || f.targetCustomerId?.toLowerCase() === targetId)) return true;
+        if (targetName && f.customerName?.toLowerCase()?.trim() === targetName) return true;
+        if (recentUploads.some((rf) => (rf.uuid || rf.id || rf._id) === (f.uuid || f.id || f._id))) return true;
+        return false;
+      });
+    }
+
+    // Case B: Normal View-Only Portal (Counter QR without customer folder)
+    if (isViewOnlyParam) {
+      const currentCustId = (effectiveCustomerId || '').toLowerCase().trim();
+      const currentName = (customerName || '').toLowerCase().trim();
+      const recentIds = new Set(recentUploads.map((rf) => rf.uuid || rf.id || rf._id).filter(Boolean));
+
+      // If recentUploads has items in this session, show them
+      if (recentIds.size > 0) {
+        return (files || []).filter((f) => {
+          const fId = f.uuid || f.id || f._id;
+          return recentIds.has(fId);
+        });
+      }
+
+      // If customer has a token/name entered, match ONLY their files
+      if (currentName || (currentCustId && currentCustId !== 'cust_anonymous')) {
+        return (files || []).filter((f) => {
+          if (!f) return false;
+          if (currentName && f.customerName?.toLowerCase()?.trim() === currentName) return true;
+          if (currentCustId && currentCustId !== 'cust_anonymous' && f.customerId?.toLowerCase() === currentCustId) return true;
+          return false;
+        });
+      }
+
+      // Fresh scan -> 0 files (never leak other shop files!)
+      return [];
+    }
+
+    // Case C: Normal Upload Mode -> Recent uploads from this session
+    return recentUploads;
+  }, [files, recentUploads, isTempQrSession, isViewOnlyParam, targetCustomerId, customerName, effectiveCustomerId, sessionId, sessionExpired]);
+
   return (
     <div className="mobile-layout">
       {/* Header */}
@@ -475,53 +546,65 @@ export function MobileView() {
               exit={{ opacity: 0, y: -16 }}
               transition={{ duration: 0.2 }}
             >
-              {/* Hidden file inputs */}
-              <input
-                ref={galleryInputRef}
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-                id="gallery-picker"
-              />
-              <input
-                ref={docInputRef}
-                type="file"
-                multiple
-                accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/zip,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-                id="doc-picker"
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-                id="camera-picker"
-              />
+              {sessionExpired ? (
+                <div className="empty-state glass-card" style={{ border: '2px solid #FEE2E2', background: '#FEF2F2', padding: '2rem 1.5rem', textAlign: 'center', borderRadius: '18px', margin: '1rem 0' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>⏱️</div>
+                  <h4 style={{ color: '#B91C1C', fontSize: '1.1rem', fontWeight: 800 }}>Upload Session Expired</h4>
+                  <p style={{ color: '#7F1D1D', fontSize: '0.84rem', marginTop: '6px', lineHeight: 1.5 }}>
+                    This temporary upload QR code has expired or was revoked. Please ask the shopkeeper to generate a new QR code.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Hidden file inputs */}
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,video/*"
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                    id="gallery-picker"
+                  />
+                  <input
+                    ref={docInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/zip,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                    id="doc-picker"
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                    id="camera-picker"
+                  />
 
-              {/* Pick buttons */}
-              <div className="pick-buttons">
-                <label htmlFor="gallery-picker" className="pick-card glass-card">
-                  <span className="pick-icon">🖼️</span>
-                  <span className="pick-label">Photos & Gallery</span>
-                  <span className="pick-sub">Phone photos</span>
-                </label>
-                <label htmlFor="doc-picker" className="pick-card glass-card">
-                  <span className="pick-icon">📄</span>
-                  <span className="pick-label">PDFs & Docs</span>
-                  <span className="pick-sub">Documents</span>
-                </label>
-                <label htmlFor="camera-picker" className="pick-card glass-card">
-                  <span className="pick-icon">📷</span>
-                  <span className="pick-label">Camera</span>
-                  <span className="pick-sub">Live photo</span>
-                </label>
-              </div>
+                  {/* Pick buttons */}
+                  <div className="pick-buttons">
+                    <label htmlFor="gallery-picker" className="pick-card glass-card">
+                      <span className="pick-icon">🖼️</span>
+                      <span className="pick-label">Photos & Gallery</span>
+                      <span className="pick-sub">Phone photos</span>
+                    </label>
+                    <label htmlFor="doc-picker" className="pick-card glass-card">
+                      <span className="pick-icon">📄</span>
+                      <span className="pick-label">PDFs & Docs</span>
+                      <span className="pick-sub">Documents</span>
+                    </label>
+                    <label htmlFor="camera-picker" className="pick-card glass-card">
+                      <span className="pick-icon">📷</span>
+                      <span className="pick-label">Camera</span>
+                      <span className="pick-sub">Live photo</span>
+                    </label>
+                  </div>
+                </>
+              )}
 
               {/* Selected file tray with accumulation & individual delete (X) */}
               {selectedFiles.length > 0 && (
@@ -803,17 +886,17 @@ export function MobileView() {
                 {/* Live Stats Summary Row */}
                 <div className="view-stats-row flex items-center justify-between mt-3 pt-3">
                   <div className="view-stat-box">
-                    <span className="stat-num">{files.length}</span>
+                    <span className="stat-num">{customerFiles.length}</span>
                     <span className="stat-label">Files</span>
                   </div>
                   <div className="view-stat-divider"></div>
                   <div className="view-stat-box">
-                    <span className="stat-num printed-color">{files.filter(f => f.printedStatus).length}</span>
+                    <span className="stat-num printed-color">{customerFiles.filter(f => f.printedStatus).length}</span>
                     <span className="stat-label">Printed ✓</span>
                   </div>
                   <div className="view-stat-divider"></div>
                   <div className="view-stat-box">
-                    <span className="stat-num queue-color">{files.filter(f => !f.printedStatus).length}</span>
+                    <span className="stat-num queue-color">{customerFiles.filter(f => !f.printedStatus).length}</span>
                     <span className="stat-label">In Queue ⏳</span>
                   </div>
                 </div>
@@ -837,7 +920,7 @@ export function MobileView() {
                     This time-limited Customer View Link has expired for your privacy and security. Please ask the shopkeeper to generate a new QR code or link.
                   </p>
                 </div>
-              ) : files.length === 0 && texts.length === 0 ? (
+              ) : customerFiles.length === 0 && texts.length === 0 ? (
                 <div className="empty-state glass-card">
                   <div className="empty-state-icon-wrap">📂</div>
                   <h4 className="empty-state-title">No files transferred yet</h4>
@@ -848,7 +931,7 @@ export function MobileView() {
               ) : (
                 <div className="view-only-list flex flex-col gap-3">
                   {/* Files List */}
-                  {files.map((f, i) => {
+                  {customerFiles.map((f, i) => {
                     const fId = f.uuid || f.id || f._id;
                     const previewUrl = f.cloudinarySecureUrl || f.previewUrl || (fId ? `${config.serverUrl}/api/files/${fId}/preview` : null);
                     const downloadUrl = f.downloadUrl ? `${config.serverUrl}${f.downloadUrl}` : (fId ? `${config.serverUrl}/api/files/${fId}/download` : null);
@@ -896,9 +979,13 @@ export function MobileView() {
                         {/* Card Bottom: Action Buttons */}
                         <div className="view-file-actions-row">
                           {previewUrl && (
-                            <a href={previewUrl} target="_blank" rel="noreferrer" className="view-card-btn btn-view">
+                            <button
+                              type="button"
+                              className="view-card-btn btn-view"
+                              onClick={() => setPreviewModal({ url: previewUrl, name: f.originalName, isPdf, isImg })}
+                            >
                               👁️ View Preview
-                            </a>
+                            </button>
                           )}
                           {downloadUrl && (
                             <a href={downloadUrl} download={f.originalName} className="view-card-btn btn-download">
@@ -928,6 +1015,62 @@ export function MobileView() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* ── PDF / Image Preview Modal ── */}
+      {previewModal && (
+        <div className="mobile-preview-overlay" onClick={() => setPreviewModal(null)}>
+          <div className="mobile-preview-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-preview-header">
+              <span className="mobile-preview-name" title={previewModal.name}>
+                {previewModal.isPdf ? '📕' : previewModal.isImg ? '🖼️' : '📄'} {previewModal.name}
+              </span>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <a
+                  href={previewModal.url}
+                  download={previewModal.name}
+                  className="preview-action-btn"
+                  style={{ background: '#EEF2FF', color: '#4338CA' }}
+                >
+                  ⬇️
+                </a>
+                <button
+                  type="button"
+                  className="preview-action-btn"
+                  style={{ background: '#FEF2F2', color: '#991B1B' }}
+                  onClick={() => setPreviewModal(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="mobile-preview-body">
+              {previewModal.isImg ? (
+                <img
+                  src={previewModal.url}
+                  alt={previewModal.name}
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }}
+                />
+              ) : previewModal.isPdf ? (
+                <PdfCanvasViewer url={previewModal.url} name={previewModal.name} />
+              ) : (
+                <div style={{ textAlign: 'center', color: '#64748B', padding: '2rem' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
+                  <p style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Preview not available</p>
+                  <p style={{ fontSize: '0.8rem' }}>Please download the file to view it.</p>
+                  <a
+                    href={previewModal.url}
+                    download={previewModal.name}
+                    className="view-card-btn btn-download"
+                    style={{ marginTop: '1rem', display: 'inline-flex' }}
+                  >
+                    ⬇️ Download
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .mobile-layout {
@@ -1679,6 +1822,96 @@ export function MobileView() {
           color: #64748B;
           margin: 6px 0 16px 0;
           line-height: 1.5;
+        }
+
+        /* ── Mobile PDF/Image Preview Modal ── */
+        .mobile-preview-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.72);
+          backdrop-filter: blur(6px);
+          z-index: 99999;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          padding: max(24px, env(safe-area-inset-top, 24px)) 0 0 0;
+          animation: fadeIn 0.18s ease;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .mobile-preview-modal {
+          width: 100%;
+          max-width: 480px;
+          height: calc(100dvh - 64px);
+          max-height: calc(100dvh - 64px);
+          background: #FFFFFF;
+          border-radius: 20px 20px 0 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.25);
+          animation: slideUp 0.22s ease;
+        }
+
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+
+        .mobile-preview-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 16px;
+          border-bottom: 1px solid #F1F5F9;
+          background: #FFFFFF;
+          flex-shrink: 0;
+        }
+
+        .mobile-preview-name {
+          font-size: 0.82rem;
+          font-weight: 800;
+          color: #0F172A;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .mobile-preview-body {
+          flex: 1;
+          overflow: auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #F8FAFC;
+          padding: 8px;
+        }
+
+        .preview-action-btn {
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.9rem;
+          font-weight: 800;
+          text-decoration: none;
+          flex-shrink: 0;
+          transition: opacity 0.15s ease;
+        }
+
+        .preview-action-btn:hover {
+          opacity: 0.8;
         }
       `}</style>
     </div>
