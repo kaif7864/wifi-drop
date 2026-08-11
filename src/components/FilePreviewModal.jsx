@@ -112,19 +112,29 @@ export function FilePreviewModal({ file, onClose }) {
         >
           {/* Header */}
           <div className="preview-modal-header">
-            <div className="preview-modal-info">
-              <span className="preview-type-icon">
-                {isImage ? '🖼️' : isPdf ? '📄' : isVideo ? '🎬' : isAudio ? '🎵' : '📁'}
-              </span>
-              <span className="preview-modal-name" title={name}>
-                {name}
-              </span>
-              {file.pageCount && file.pageCount > 1 && (
-                <span className="page-count-badge">
-                  {file.pageCount} Pages
+            <div className="preview-modal-header-top">
+              <div className="preview-modal-info">
+                <span className="preview-type-icon">
+                  {isImage ? '🖼️' : isPdf ? '📄' : isVideo ? '🎬' : isAudio ? '🎵' : '📁'}
                 </span>
-              )}
+                <span className="preview-modal-name" title={name}>
+                  {name}
+                </span>
+                {file.pageCount && file.pageCount > 1 && (
+                  <span className="page-count-badge">
+                    {file.pageCount} Pages
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={onClose}
+                className="btn-modal-close"
+                aria-label="Close preview"
+              >
+                ✕
+              </button>
             </div>
+
             <div className="preview-modal-actions">
               {isImage && (
                 <button
@@ -170,13 +180,6 @@ export function FilePreviewModal({ file, onClose }) {
                 className="btn-modal-action btn-download-action"
               >
                 ⬇ Download
-              </button>
-              <button
-                onClick={onClose}
-                className="btn-modal-close"
-                aria-label="Close preview"
-              >
-                ✕
               </button>
             </div>
           </div>
@@ -304,13 +307,22 @@ export function FilePreviewModal({ file, onClose }) {
 
           .preview-modal-header {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.875rem 1.25rem;
+            flex-direction: column;
+            padding: 0.75rem 1rem;
             border-bottom: 1px solid #E2E8F0;
             background: #F8FAFC;
-            gap: 12px;
+            gap: 8px;
             flex-shrink: 0;
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .preview-modal-header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            gap: 8px;
           }
 
           .preview-modal-info {
@@ -349,8 +361,16 @@ export function FilePreviewModal({ file, onClose }) {
           .preview-modal-actions {
             display: flex;
             align-items: center;
-            gap: 8px;
-            flex-shrink: 0;
+            gap: 6px;
+            overflow-x: auto;
+            width: 100%;
+            box-sizing: border-box;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 2px;
+          }
+
+          .preview-modal-actions::-webkit-scrollbar {
+            display: none;
           }
 
           .btn-modal-action {

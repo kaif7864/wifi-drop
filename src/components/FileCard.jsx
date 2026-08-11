@@ -339,8 +339,11 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
         <div className="preview-overlay" onClick={() => setShowPreview(false)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
             <div className="preview-header">
-              <span className="preview-title">{file.originalName}</span>
-              <div className="flex items-center gap-2">
+              <div className="preview-header-top">
+                <span className="preview-title" title={file.originalName}>{file.originalName}</span>
+                <button className="btn-icon btn-close-preview" onClick={() => setShowPreview(false)} aria-label="Close preview">✕</button>
+              </div>
+              <div className="preview-header-actions">
                 {isImage && (
                   <button
                     type="button"
@@ -376,7 +379,6 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                 <button className="btn btn-secondary btn-sm" onClick={handleDownload}>
                   Download ⬇
                 </button>
-                <button className="btn-icon btn-close-preview" onClick={() => setShowPreview(false)}>✕</button>
               </div>
             </div>
             <div className="preview-body">
@@ -515,12 +517,45 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
         }
         .preview-header {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: var(--space-4) var(--space-6);
+          flex-direction: column;
+          gap: 8px;
+          padding: 0.75rem 1rem;
           border-bottom: 1px solid var(--border);
           background: var(--bg-primary);
+          box-sizing: border-box;
+          width: 100%;
         }
+
+        .preview-header-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+          gap: 8px;
+        }
+
+        .preview-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          overflow-x: auto;
+          width: 100%;
+          box-sizing: border-box;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 2px;
+        }
+
+        .preview-header-actions::-webkit-scrollbar {
+          display: none;
+        }
+
+        .preview-header-actions .btn {
+          flex-shrink: 0;
+          white-space: nowrap;
+          font-size: 0.76rem;
+          padding: 5px 10px;
+        }
+
         .preview-title {
           font-size: var(--font-size-sm);
           font-weight: 600;
@@ -528,7 +563,6 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          max-width: 400px;
         }
         .preview-body {
           flex: 1;
