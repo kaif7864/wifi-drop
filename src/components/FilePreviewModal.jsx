@@ -112,27 +112,18 @@ export function FilePreviewModal({ file, onClose }) {
         >
           {/* Header */}
           <div className="preview-modal-header">
-            <div className="preview-modal-header-top">
-              <div className="preview-modal-info">
-                <span className="preview-type-icon">
-                  {isImage ? '🖼️' : isPdf ? '📄' : isVideo ? '🎬' : isAudio ? '🎵' : '📁'}
+            <div className="preview-modal-info">
+              <span className="preview-type-icon">
+                {isImage ? '🖼️' : isPdf ? '📄' : isVideo ? '🎬' : isAudio ? '🎵' : '📁'}
+              </span>
+              <span className="preview-modal-name" title={name}>
+                {name}
+              </span>
+              {file.pageCount && file.pageCount > 1 && (
+                <span className="page-count-badge">
+                  {file.pageCount} Pages
                 </span>
-                <span className="preview-modal-name" title={name}>
-                  {name}
-                </span>
-                {file.pageCount && file.pageCount > 1 && (
-                  <span className="page-count-badge">
-                    {file.pageCount} Pages
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={onClose}
-                className="btn-modal-close"
-                aria-label="Close preview"
-              >
-                ✕
-              </button>
+              )}
             </div>
 
             <div className="preview-modal-actions">
@@ -188,6 +179,14 @@ export function FilePreviewModal({ file, onClose }) {
               >
                 <span>⬇</span>
                 <span className="btn-lbl"> Download</span>
+              </button>
+              <button
+                onClick={onClose}
+                className="btn-modal-close"
+                aria-label="Close preview"
+                title="Close"
+              >
+                ✕
               </button>
             </div>
           </div>

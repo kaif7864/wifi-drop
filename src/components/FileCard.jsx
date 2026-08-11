@@ -339,10 +339,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
         <div className="preview-overlay" onClick={() => setShowPreview(false)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
             <div className="preview-header">
-              <div className="preview-header-top">
-                <span className="preview-title" title={file.originalName}>{file.originalName}</span>
-                <button className="btn-icon btn-close-preview" onClick={() => setShowPreview(false)} aria-label="Close preview">✕</button>
-              </div>
+              <span className="preview-title" title={file.originalName}>{file.originalName}</span>
               <div className="preview-header-actions">
                 {isImage && (
                   <button
@@ -384,6 +381,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                   <span>⬇</span>
                   <span className="btn-lbl"> Download</span>
                 </button>
+                <button className="btn-icon btn-close-preview" onClick={() => setShowPreview(false)} aria-label="Close preview" title="Close">✕</button>
               </div>
             </div>
             <div className="preview-body">
