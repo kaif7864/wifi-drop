@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { config } from '../config';
 import { PdfCanvasViewer } from './PdfCanvasViewer';
 
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 const isMobile = () => /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
 const PDF_TYPE = 'application/pdf';
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg'];
@@ -341,7 +342,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                   <PdfCanvasViewer url={previewUrl} name={file.originalName} />
                 ) : (
                   <iframe
-                    src={`${previewUrl}#toolbar=1&navpanes=0`}
+                    src={`${previewUrl}#zoom=100&toolbar=1&navpanes=0`}
                     title={file.originalName}
                     className="preview-iframe"
                     style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px' }}

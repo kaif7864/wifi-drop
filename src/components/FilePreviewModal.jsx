@@ -145,7 +145,7 @@ export function FilePreviewModal({ file, onClose }) {
                 <PdfCanvasViewer url={previewUrl} name={name} />
               ) : (
                 <iframe
-                  src={`${previewUrl}#toolbar=1&navpanes=0`}
+                  src={`${previewUrl}#zoom=100&toolbar=1&navpanes=0`}
                   title={name}
                   className="preview-pdf-iframe"
                   style={{ width: '100%', height: '100%', minHeight: '650px', border: 'none', borderRadius: '8px' }}
