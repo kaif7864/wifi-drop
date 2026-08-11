@@ -1,7 +1,7 @@
 /**
  * client/src/components/PdfCanvasViewer.jsx
  * Premium In-App Mobile & PWA PDF Viewer using PDF.js
- * Feature-packed: Direct Mobile System Print (🖨️), Zoom (🔍), Rotate (🔄), Open (↗), & Download.
+ * Feature-packed: Password-Protected PDF Support (🔒), Direct Mobile System Print (🖨️), Zoom (🔍), Rotate (🔄), Open (↗), & Download.
  * Works 100% on Mobile Chrome, Safari, Android PWA, iOS, and Desktop.
  */
 
@@ -11,7 +11,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 // Configure PDF.js worker via cdnjs matching version
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-export function PdfCanvasViewer({ url, name }) {
+export function PdfCanvasViewer({ url, name, note = '' }) {
   const containerRef = useRef(null);
   const [numPages, setNumPages] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -19,43 +19,65 @@ export function PdfCanvasViewer({ url, name }) {
   const [scale, setScale] = useState(1.0);
   const [rotation, setRotation] = useState(0);
   const [isPrinting, setIsPrinting] = useState(false);
+
+  // Password Protection States
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [pdfPassword, setPdfPassword] = useState(note || '');
+  const [passwordError, setPasswordError] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+
   const pdfDocRef = useRef(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadPdf = async (pwd = '') => {
     setLoading(true);
     setError(null);
+    setPasswordError(false);
 
-    const loadPdf = async () => {
-      try {
-        const loadingTask = pdfjsLib.getDocument({
-          url: url,
-          withCredentials: false,
-        });
+    try {
+      const loadingTask = pdfjsLib.getDocument({
+        url: url,
+        password: pwd,
+        withCredentials: false,
+      });
 
-        const pdfDoc = await loadingTask.promise;
-        if (!isMounted) return;
-
-        pdfDocRef.current = pdfDoc;
-        setNumPages(pdfDoc.numPages);
-        setLoading(false);
-      } catch (err) {
-        console.error('[PdfCanvasViewer Error]:', err);
-        if (isMounted) {
-          setError(err.message || 'Failed to load PDF');
-          setLoading(false);
+      loadingTask.onPassword = (updatePassword, reason) => {
+        setNeedsPassword(true);
+        if (reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD) {
+          setPasswordError(true);
         }
+      };
+
+      const pdfDoc = await loadingTask.promise;
+      pdfDocRef.current = pdfDoc;
+      setNumPages(pdfDoc.numPages);
+      setNeedsPassword(false);
+      setLoading(false);
+      setIsUnlocking(false);
+    } catch (err) {
+      console.error('[PdfCanvasViewer Error]:', err);
+      if (err.name === 'PasswordException' || err.code === 1 || err.message?.toLowerCase().includes('password')) {
+        setNeedsPassword(true);
+        if (pwd) setPasswordError(true);
+      } else {
+        setError(err.message || 'Failed to load PDF');
       }
-    };
-
-    if (url) {
-      loadPdf();
+      setLoading(false);
+      setIsUnlocking(false);
     }
+  };
 
-    return () => {
-      isMounted = false;
-    };
+  useEffect(() => {
+    if (url) {
+      loadPdf(note || '');
+    }
   }, [url]);
+
+  const handleUnlockSubmit = (e) => {
+    e.preventDefault();
+    if (!pdfPassword) return;
+    setIsUnlocking(true);
+    loadPdf(pdfPassword);
+  };
 
   // Render pages when pdfDoc, scale, or rotation changes
   useEffect(() => {
@@ -115,14 +137,14 @@ export function PdfCanvasViewer({ url, name }) {
       }
     };
 
-    if (!loading && pdfDocRef.current) {
+    if (!loading && !needsPassword && pdfDocRef.current) {
       renderPages();
     }
 
     return () => {
       isMounted = false;
     };
-  }, [loading, scale, rotation, numPages]);
+  }, [loading, needsPassword, scale, rotation, numPages]);
 
   // Mobile System Print Trigger
   const handleSystemPrint = async () => {
@@ -234,24 +256,61 @@ export function PdfCanvasViewer({ url, name }) {
         </div>
       </div>
 
-      {/* Main Pages Canvas Container */}
+      {/* Main Content Area */}
       <div className="pdf-pages-scroll-area">
         {loading && (
           <div className="pdf-loading-state">
             <span className="pdf-spin-icon">⏳</span>
-            <p>Rendering PDF Pages...</p>
+            <p>Loading PDF Document...</p>
           </div>
         )}
 
-        {error && (
+        {needsPassword ? (
+          <div className="pdf-password-card">
+            <div className="pdf-password-icon">🔒</div>
+            <h4 className="pdf-password-title">Protected PDF Document</h4>
+            <p className="pdf-password-sub">This document is encrypted. Please enter the password to view.</p>
+
+            {note && (
+              <div className="pdf-note-hint">
+                <span>💡 File Note Tag:</span>
+                <code>{note}</code>
+              </div>
+            )}
+
+            <form onSubmit={handleUnlockSubmit} className="pdf-password-form">
+              <input
+                type="text"
+                className="pdf-password-input"
+                placeholder="Enter password..."
+                value={pdfPassword}
+                onChange={(e) => setPdfPassword(e.target.value)}
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="pdf-password-submit"
+                disabled={isUnlocking || !pdfPassword}
+              >
+                {isUnlocking ? 'Unlocking...' : 'Unlock & View 🔓'}
+              </button>
+            </form>
+
+            {passwordError && (
+              <div className="pdf-password-err">
+                ⚠️ Incorrect password. Please try again.
+              </div>
+            )}
+          </div>
+        ) : error ? (
           <div className="pdf-error-state">
             <span style={{ fontSize: '2rem' }}>⚠️</span>
             <p style={{ fontWeight: 700, margin: '8px 0 4px' }}>Unable to render PDF preview</p>
             <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{error}</span>
           </div>
+        ) : (
+          <div ref={containerRef} className="pdf-canvas-container" />
         )}
-
-        <div ref={containerRef} className="pdf-canvas-container" />
       </div>
 
       <style>{`
@@ -388,6 +447,117 @@ export function PdfCanvasViewer({ url, name }) {
           font-size: 2rem;
           margin-bottom: 8px;
           animation: pdfSpin 1.5s infinite linear;
+        }
+
+        .pdf-password-card {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 16px;
+          padding: 24px 20px;
+          max-width: 380px;
+          width: 100%;
+          margin: 24px auto;
+          text-align: center;
+          box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);
+          box-sizing: border-box;
+        }
+
+        .pdf-password-icon {
+          font-size: 2.5rem;
+          margin-bottom: 10px;
+        }
+
+        .pdf-password-title {
+          font-size: 1.05rem;
+          font-weight: 800;
+          color: #0F172A;
+          margin: 0 0 6px 0;
+        }
+
+        .pdf-password-sub {
+          font-size: 0.82rem;
+          color: #64748B;
+          margin: 0 0 16px 0;
+          line-height: 1.4;
+        }
+
+        .pdf-note-hint {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          background: #FEF3C7;
+          border: 1px solid #FDE68A;
+          color: #92400E;
+          border-radius: 8px;
+          padding: 6px 12px;
+          font-size: 0.78rem;
+          font-weight: 700;
+          margin-bottom: 16px;
+        }
+
+        .pdf-note-hint code {
+          font-family: monospace;
+          font-size: 0.85rem;
+          background: #F59E0B;
+          color: white;
+          padding: 1px 6px;
+          border-radius: 4px;
+        }
+
+        .pdf-password-form {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .pdf-password-input {
+          width: 100%;
+          padding: 10px 14px;
+          border: 1.5px solid #CBD5E1;
+          border-radius: 10px;
+          font-size: 0.9rem;
+          outline: none;
+          box-sizing: border-box;
+          transition: border-color 0.15s ease;
+        }
+
+        .pdf-password-input:focus {
+          border-color: #4F46E5;
+          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+        }
+
+        .pdf-password-submit {
+          width: 100%;
+          padding: 10px 14px;
+          background: #4F46E5;
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 0.88rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .pdf-password-submit:hover {
+          background: #4338CA;
+        }
+
+        .pdf-password-submit:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .pdf-password-err {
+          margin-top: 12px;
+          font-size: 0.78rem;
+          font-weight: 700;
+          color: #DC2626;
+          background: #FEF2F2;
+          border: 1px solid #FCA5A5;
+          border-radius: 8px;
+          padding: 8px 12px;
         }
 
         @keyframes pdfSpin {

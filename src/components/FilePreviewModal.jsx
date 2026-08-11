@@ -12,6 +12,7 @@ import { PdfCanvasViewer } from './PdfCanvasViewer';
 const isMobile = () => /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
 
 export function FilePreviewModal({ file, onClose }) {
+  const [imgRotation, setImgRotation] = useState(0);
   if (!file) return null;
 
   const fileId = file.uuid || file.id || file._id;
@@ -72,6 +73,32 @@ export function FilePreviewModal({ file, onClose }) {
     }
   };
 
+  const handlePrintImage = () => {
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Image - ${name}</title>
+            <style>
+              body { margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: white; }
+              img { max-width: 100%; max-height: 100vh; object-fit: contain; transform: rotate(${imgRotation}deg); }
+              @media print {
+                body { height: auto; }
+                img { max-width: 100%; height: auto; }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${previewUrl}" onload="window.focus(); window.print(); window.close();" />
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+    }
+  };
+
   return createPortal(
     <AnimatePresence>
       <div className={`preview-modal-overlay ${mobile ? 'preview-mobile' : ''}`} onClick={onClose}>
@@ -99,6 +126,30 @@ export function FilePreviewModal({ file, onClose }) {
               )}
             </div>
             <div className="preview-modal-actions">
+              {isImage && (
+                <button
+                  type="button"
+                  onClick={() => setImgRotation((r) => (r + 90) % 360)}
+                  className="btn-modal-action"
+                  title="Rotate Image 90°"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '3px' }}>
+                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.99 6.57 2.57L21 8" />
+                    <polyline points="21 3 21 8 16 8" />
+                  </svg>
+                  Rotate
+                </button>
+              )}
+              {isImage && (
+                <button
+                  type="button"
+                  onClick={handlePrintImage}
+                  className="btn-modal-action btn-print-action"
+                  style={{ background: '#4F46E5', color: '#FFF' }}
+                >
+                  🖨️ Print
+                </button>
+              )}
               <button
                 onClick={handleOpenInNewTab}
                 className="btn-modal-action btn-open-tab"
@@ -133,16 +184,25 @@ export function FilePreviewModal({ file, onClose }) {
           {/* Body */}
           <div className="preview-modal-body">
             {isImage && (
-              <img
-                src={previewUrl}
-                alt={name}
-                className="preview-img-element"
-              />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', overflow: 'hidden', padding: '12px' }}>
+                <img
+                  src={previewUrl}
+                  alt={name}
+                  className="preview-img-element"
+                  style={{
+                    transform: `rotate(${imgRotation}deg)`,
+                    transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    maxWidth: '100%',
+                    maxHeight: '70vh',
+                    objectFit: 'contain'
+                  }}
+                />
+              </div>
             )}
 
             {isPdf && (
               mobile ? (
-                <PdfCanvasViewer url={previewUrl} name={name} />
+                <PdfCanvasViewer url={previewUrl} name={name} note={file.note} />
               ) : (
                 <iframe
                   src={`${previewUrl}#zoom=100&toolbar=1&navpanes=0`}

@@ -67,6 +67,7 @@ import { isFileInBill, toggleFileInBill } from '../utils/billManager';
 export function FileCard({ file, onDelete, onTogglePrint }) {
   const [showPreview, setShowPreview] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [imgRotation, setImgRotation] = useState(0);
   const fileId = file.uuid || file.id || file._id;
   const [addedToBill, setAddedToBill] = useState(() => isFileInBill(fileId));
   const isPrinted = file.printedStatus || false;
@@ -178,6 +179,32 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
     }
   };
 
+  const handlePrintImage = () => {
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Image - ${file.originalName || 'Image'}</title>
+            <style>
+              body { margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: white; }
+              img { max-width: 100%; max-height: 100vh; object-fit: contain; transform: rotate(${imgRotation}deg); }
+              @media print {
+                body { height: auto; }
+                img { max-width: 100%; height: auto; }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${previewUrl}" onload="window.focus(); window.print(); window.close();" />
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+    }
+  };
+
   return (
     <>
       <motion.div
@@ -209,8 +236,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                   padding: '2px 8px',
                   fontSize: '11px',
                   fontWeight: 700,
-                  marginTop: '3px',
-                  marginBottom: '2px',
+                  marginTop: '4px',
                   cursor: 'pointer',
                   width: 'fit-content',
                   maxWidth: '100%',
@@ -315,6 +341,30 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
             <div className="preview-header">
               <span className="preview-title">{file.originalName}</span>
               <div className="flex items-center gap-2">
+                {isImage && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setImgRotation((r) => (r + 90) % 360)}
+                    title="Rotate Image 90°"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '3px' }}>
+                      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.99 6.57 2.57L21 8" />
+                      <polyline points="21 3 21 8 16 8" />
+                    </svg>
+                    Rotate
+                  </button>
+                )}
+                {isImage && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={handlePrintImage}
+                    style={{ background: '#4F46E5', color: '#FFF' }}
+                  >
+                    🖨️ Print
+                  </button>
+                )}
                 <button className="btn btn-ghost btn-sm" onClick={handleOpenInNewTab}>
                   Open ↗
                 </button>
@@ -331,15 +381,24 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
             </div>
             <div className="preview-body">
               {isImage && (
-                <img
-                  src={previewUrl}
-                  alt={file.originalName}
-                  className="preview-image"
-                />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', overflow: 'hidden', padding: '12px' }}>
+                  <img
+                    src={previewUrl}
+                    alt={file.originalName}
+                    className="preview-image"
+                    style={{
+                      transform: `rotate(${imgRotation}deg)`,
+                      transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                      maxWidth: '100%',
+                      maxHeight: '65vh',
+                      objectFit: 'contain'
+                    }}
+                  />
+                </div>
               )}
               {isPdf && (
                 isMobile() ? (
-                  <PdfCanvasViewer url={previewUrl} name={file.originalName} />
+                  <PdfCanvasViewer url={previewUrl} name={file.originalName} note={file.note} />
                 ) : (
                   <iframe
                     src={`${previewUrl}#zoom=100&toolbar=1&navpanes=0`}
