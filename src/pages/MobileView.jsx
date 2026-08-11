@@ -36,8 +36,16 @@ function getShopAndSessionFromUrl() {
     try { targetCustId = sessionStorage.getItem('wifidrop_target_customer_id') || null; } catch {}
   }
 
-  const rawSession = params.get('session') || null;
-  const rawShop = params.get('shop') || null;
+  let rawSession = params.get('session') || null;
+  let rawShop = params.get('shop') || null;
+
+  // Fallback to session storage if address bar was already masked
+  if (!rawSession) {
+    try { rawSession = sessionStorage.getItem('wifidrop_session_id') || null; } catch {}
+  }
+  if (!rawShop) {
+    try { rawShop = sessionStorage.getItem('wifidrop_shop_id') || null; } catch {}
+  }
 
   // Determine legitimate shopId vs guest session:
   // If ?shop= is provided, use it.
@@ -70,6 +78,19 @@ export function MobileView() {
     const p = new URLSearchParams(window.location.search);
     return p.get('view') === 'only' || p.get('mode') === 'view';
   }, []);
+
+  // Mask/Clean sensitive URL query parameters (session, customerId, shop) from browser address bar
+  useEffect(() => {
+    if (window.location.search) {
+      try {
+        if (sessionId) sessionStorage.setItem('wifidrop_session_id', sessionId);
+        if (shopId && shopId !== 'default') sessionStorage.setItem('wifidrop_shop_id', shopId);
+      } catch {}
+
+      const cleanPath = window.location.pathname + (isViewOnlyParam ? '#view' : '');
+      window.history.replaceState({ masked: true }, document.title, cleanPath);
+    }
+  }, [sessionId, shopId, isViewOnlyParam]);
 
   const { socket, connected } = useSocket('mobile', effectiveDeviceName, sessionId);
   const { files, texts, uploading, uploadProgress, uploadFiles, sendText, fetchHistory } = useTransfer(shopId);
