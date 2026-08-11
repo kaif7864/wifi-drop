@@ -351,11 +351,11 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                     onClick={() => setImgRotation((r) => (r + 90) % 360)}
                     title="Rotate Image 90°"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '3px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.99 6.57 2.57L21 8" />
                       <polyline points="21 3 21 8 16 8" />
                     </svg>
-                    Rotate
+                    <span className="btn-lbl"> Rotate</span>
                   </button>
                 )}
                 {isImage && (
@@ -364,20 +364,25 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                     className="btn btn-primary btn-sm"
                     onClick={handlePrintImage}
                     style={{ background: '#4F46E5', color: '#FFF' }}
+                    title="Print Image"
                   >
-                    🖨️ Print
+                    <span>🖨️</span>
+                    <span className="btn-lbl"> Print</span>
                   </button>
                 )}
-                <button className="btn btn-ghost btn-sm" onClick={handleOpenInNewTab}>
-                  Open ↗
+                <button className="btn btn-ghost btn-sm" onClick={handleOpenInNewTab} title="Open in New Tab">
+                  <span>↗</span>
+                  <span className="btn-lbl"> Open</span>
                 </button>
                 {!isMobile() && isPdf && (
-                  <button className="btn btn-primary btn-sm" onClick={handlePrintPdf} style={{ background: '#4F46E5', color: '#FFF' }}>
-                    🖨️ Print
+                  <button className="btn btn-primary btn-sm" onClick={handlePrintPdf} style={{ background: '#4F46E5', color: '#FFF' }} title="Print Document">
+                    <span>🖨️</span>
+                    <span className="btn-lbl"> Print</span>
                   </button>
                 )}
-                <button className="btn btn-secondary btn-sm" onClick={handleDownload}>
-                  Download ⬇
+                <button className="btn btn-secondary btn-sm" onClick={handleDownload} title="Download File">
+                  <span>⬇</span>
+                  <span className="btn-lbl"> Download</span>
                 </button>
               </div>
             </div>
@@ -597,101 +602,132 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           max-width: 500px;
         }
 
-        /* ── Mobile Responsive Breakpoints ── */
-        @media (max-width: 768px) {
-          .file-card {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 0.65rem;
-            padding: 0.85rem 1rem;
-          }
+          @media (max-width: 768px) {
+            .btn-lbl {
+              display: none !important;
+            }
 
-          .file-actions {
-            display: flex;
-            flex-direction: row;
-            flex-wrap: nowrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 4px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border);
-            width: 100%;
-            box-sizing: border-box;
-          }
+            .file-card {
+              flex-direction: column;
+              align-items: stretch;
+              gap: 0.65rem;
+              padding: 0.85rem 1rem;
+            }
 
-          .file-pill-actions {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            flex-shrink: 0;
-          }
+            .file-actions {
+              display: flex;
+              flex-direction: row;
+              flex-wrap: nowrap;
+              align-items: center;
+              justify-content: space-between;
+              gap: 4px;
+              padding-top: 8px;
+              border-top: 1px solid var(--border);
+              width: 100%;
+              box-sizing: border-box;
+            }
 
-          .file-icon-actions {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            flex-shrink: 0;
-          }
+            .file-pill-actions {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              flex-shrink: 0;
+            }
 
-          .file-actions .btn-print-toggle {
-            padding: 5px 8px;
-            font-size: 11px;
-            font-weight: 700;
-            white-space: nowrap;
-          }
+            .file-icon-actions {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              flex-shrink: 0;
+            }
 
-          .file-actions .btn-icon {
-            width: 30px;
-            height: 30px;
-            min-width: 30px;
-            padding: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            border-radius: 8px;
-          }
+            .file-actions .btn-print-toggle {
+              padding: 5px 8px;
+              font-size: 11px;
+              font-weight: 700;
+              white-space: nowrap;
+            }
 
-          .preview-overlay {
-            padding: max(24px, env(safe-area-inset-top, 24px)) 0 0 0;
-            align-items: flex-end;
-          }
+            .file-actions .btn-icon {
+              width: 30px;
+              height: 30px;
+              min-width: 30px;
+              padding: 0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+              border-radius: 8px;
+            }
 
-          .preview-modal {
-            max-height: calc(100dvh - 64px);
-            height: calc(100dvh - 64px);
-            border-radius: 20px 20px 0 0;
-            border: none;
-          }
+            .preview-overlay {
+              padding: max(24px, env(safe-area-inset-top, 24px)) 0 0 0;
+              align-items: flex-end;
+            }
 
-          .preview-header {
-            padding: 0.75rem 1rem;
-          }
+            .preview-modal {
+              max-height: calc(100dvh - 64px);
+              height: calc(100dvh - 64px);
+              border-radius: 20px 20px 0 0;
+              border: none;
+            }
 
-          .preview-title {
-            max-width: 150px;
-            font-size: 0.82rem;
-          }
+            .preview-header {
+              flex-direction: row;
+              align-items: center;
+              justify-content: space-between;
+              padding: 0.65rem 0.85rem;
+            }
 
-          .btn-close-preview {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: #FEF2F2;
-            color: #DC2626;
-            border: 1.5px solid #FCA5A5;
-            font-size: 16px;
-            font-weight: 900;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
+            .preview-header-top {
+              width: auto;
+              flex: 1;
+              min-width: 0;
+            }
 
-          .preview-body {
-            padding: 0.5rem;
-            min-height: 220px;
+            .preview-header-actions {
+              width: auto;
+              overflow-x: visible;
+              gap: 5px;
+            }
+
+            .preview-header-actions .btn {
+              padding: 6px 10px;
+              font-size: 0.95rem;
+              border-radius: 8px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            }
+
+            .preview-header-actions .btn svg {
+              margin-right: 0 !important;
+            }
+
+            .preview-title {
+              max-width: 120px;
+              font-size: 0.82rem;
+            }
+
+            .btn-close-preview {
+              width: 36px;
+              height: 36px;
+              border-radius: 50%;
+              background: #FEF2F2;
+              color: #DC2626;
+              border: 1.5px solid #FCA5A5;
+              font-size: 16px;
+              font-weight: 900;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+
+            .preview-body {
+              padding: 0.5rem;
+              min-height: 220px;
+            }
           }
-        }
       `}</style>
     </>
   );

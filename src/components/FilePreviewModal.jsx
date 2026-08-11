@@ -143,11 +143,11 @@ export function FilePreviewModal({ file, onClose }) {
                   className="btn-modal-action"
                   title="Rotate Image 90°"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '3px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.99 6.57 2.57L21 8" />
                     <polyline points="21 3 21 8 16 8" />
                   </svg>
-                  Rotate
+                  <span className="btn-lbl"> Rotate</span>
                 </button>
               )}
               {isImage && (
@@ -156,30 +156,38 @@ export function FilePreviewModal({ file, onClose }) {
                   onClick={handlePrintImage}
                   className="btn-modal-action btn-print-action"
                   style={{ background: '#4F46E5', color: '#FFF' }}
+                  title="Print Image"
                 >
-                  🖨️ Print
+                  <span>🖨️</span>
+                  <span className="btn-lbl"> Print</span>
                 </button>
               )}
               <button
                 onClick={handleOpenInNewTab}
                 className="btn-modal-action btn-open-tab"
+                title="Open in New Tab"
               >
-                Open ↗
+                <span>↗</span>
+                <span className="btn-lbl"> Open</span>
               </button>
               {!mobile && isPdf && (
                 <button
                   onClick={handlePrint}
                   className="btn-modal-action btn-print-action"
                   style={{ background: '#4F46E5', color: '#FFF' }}
+                  title="Print Document"
                 >
-                  🖨️ Print
+                  <span>🖨️</span>
+                  <span className="btn-lbl"> Print</span>
                 </button>
               )}
               <button
                 onClick={handleDownload}
                 className="btn-modal-action btn-download-action"
+                title="Download File"
               >
-                ⬇ Download
+                <span>⬇</span>
+                <span className="btn-lbl"> Download</span>
               </button>
             </div>
           </div>
@@ -460,6 +468,10 @@ export function FilePreviewModal({ file, onClose }) {
 
           /* ── Mobile Responsive Breakpoints ── */
           @media (max-width: 640px) {
+            .btn-lbl {
+              display: none !important;
+            }
+
             .preview-modal-overlay {
               padding: max(24px, env(safe-area-inset-top, 24px)) 0 0 0;
             }
@@ -471,18 +483,40 @@ export function FilePreviewModal({ file, onClose }) {
             }
 
             .preview-modal-header {
-              padding: 0.75rem 1rem;
-              gap: 8px;
+              flex-direction: row;
+              align-items: center;
+              justify-content: space-between;
+              padding: 0.65rem 0.85rem;
+            }
+
+            .preview-modal-header-top {
+              width: auto;
+              flex: 1;
+              min-width: 0;
+            }
+
+            .preview-modal-actions {
+              width: auto;
+              overflow-x: visible;
+              gap: 5px;
             }
 
             .preview-modal-name {
               font-size: 0.82rem;
-              max-width: 140px;
+              max-width: 120px;
             }
 
             .btn-modal-action {
               padding: 6px 10px;
-              font-size: 0.74rem;
+              font-size: 0.95rem;
+              border-radius: 8px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            }
+
+            .btn-modal-action svg {
+              margin-right: 0 !important;
             }
 
             .preview-modal-body {
