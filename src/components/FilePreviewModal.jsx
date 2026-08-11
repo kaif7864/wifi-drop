@@ -53,6 +53,25 @@ export function FilePreviewModal({ file, onClose }) {
     window.open(previewUrl, '_blank', 'noopener,noreferrer');
   };
 
+  const handlePrint = () => {
+    const iframe = document.querySelector('.preview-pdf-iframe');
+    if (iframe && iframe.contentWindow) {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        return;
+      } catch (e) {
+        console.warn('Iframe print failed:', e);
+      }
+    }
+    const printWin = window.open(previewUrl, '_blank');
+    if (printWin) {
+      printWin.onload = () => {
+        printWin.print();
+      };
+    }
+  };
+
   return createPortal(
     <AnimatePresence>
       <div className={`preview-modal-overlay ${mobile ? 'preview-mobile' : ''}`} onClick={onClose}>
@@ -80,12 +99,19 @@ export function FilePreviewModal({ file, onClose }) {
               )}
             </div>
             <div className="preview-modal-actions">
-              {!mobile && (
+              <button
+                onClick={handleOpenInNewTab}
+                className="btn-modal-action btn-open-tab"
+              >
+                Open ↗
+              </button>
+              {!mobile && isPdf && (
                 <button
-                  onClick={handleOpenInNewTab}
-                  className="btn-modal-action btn-open-tab"
+                  onClick={handlePrint}
+                  className="btn-modal-action btn-print-action"
+                  style={{ background: '#4F46E5', color: '#FFF' }}
                 >
-                  Open ↗
+                  🖨️ Print
                 </button>
               )}
               <button
@@ -115,7 +141,16 @@ export function FilePreviewModal({ file, onClose }) {
             )}
 
             {isPdf && (
-              <PdfCanvasViewer url={previewUrl} name={name} />
+              mobile ? (
+                <PdfCanvasViewer url={previewUrl} name={name} />
+              ) : (
+                <iframe
+                  src={`${previewUrl}#toolbar=1&navpanes=0`}
+                  title={name}
+                  className="preview-pdf-iframe"
+                  style={{ width: '100%', height: '100%', minHeight: '650px', border: 'none', borderRadius: '8px' }}
+                />
+              )
             )}
 
             {isVideo && (

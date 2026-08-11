@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { config } from '../config';
 import { PdfCanvasViewer } from './PdfCanvasViewer';
 
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+const isMobile = () => /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
 const PDF_TYPE = 'application/pdf';
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg'];
 const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3'];
@@ -141,6 +141,13 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
     window.open(previewUrl, '_blank');
   };
 
+  const handleCopyNote = (e) => {
+    e.stopPropagation();
+    try {
+      navigator.clipboard.writeText(file.note);
+    } catch {}
+  };
+
   const togglePrint = async () => {
     if (onTogglePrint) {
       onTogglePrint(file);
@@ -148,6 +155,25 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
       try {
         await axios.patch(`${config.serverUrl}/api/files/${file.uuid || file.id || file._id}/print`);
       } catch {}
+    }
+  };
+
+  const handlePrintPdf = () => {
+    const iframe = document.querySelector('.preview-iframe');
+    if (iframe && iframe.contentWindow) {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        return;
+      } catch (e) {
+        console.warn('Iframe print error:', e);
+      }
+    }
+    const printWin = window.open(previewUrl, '_blank');
+    if (printWin) {
+      printWin.onload = () => {
+        printWin.print();
+      };
     }
   };
 
@@ -188,12 +214,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                   width: 'fit-content',
                   maxWidth: '100%',
                 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  try {
-                    navigator.clipboard.writeText(file.note);
-                  } catch {}
-                }}
+                onClick={handleCopyNote}
                 title="Click to copy file password / note"
               >
                 <span>🔑</span>
@@ -293,7 +314,15 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
             <div className="preview-header">
               <span className="preview-title">{file.originalName}</span>
               <div className="flex items-center gap-2">
-                <button className="btn btn-primary btn-sm" onClick={handleDownload}>
+                <button className="btn btn-ghost btn-sm" onClick={handleOpenInNewTab}>
+                  Open ↗
+                </button>
+                {!isMobile() && isPdf && (
+                  <button className="btn btn-primary btn-sm" onClick={handlePrintPdf} style={{ background: '#4F46E5', color: '#FFF' }}>
+                    🖨️ Print
+                  </button>
+                )}
+                <button className="btn btn-secondary btn-sm" onClick={handleDownload}>
                   Download ⬇
                 </button>
                 <button className="btn-icon btn-close-preview" onClick={() => setShowPreview(false)}>✕</button>
@@ -308,7 +337,16 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                 />
               )}
               {isPdf && (
-                <PdfCanvasViewer url={previewUrl} name={file.originalName} />
+                isMobile() ? (
+                  <PdfCanvasViewer url={previewUrl} name={file.originalName} />
+                ) : (
+                  <iframe
+                    src={`${previewUrl}#toolbar=1&navpanes=0`}
+                    title={file.originalName}
+                    className="preview-iframe"
+                    style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px' }}
+                  />
+                )
               )}
               {isVideo && (
                 <video controls src={previewUrl} className="preview-video" autoPlay />
