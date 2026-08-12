@@ -9,12 +9,20 @@ export function ScannerPageReview({
   activePageIndex,
   onSelectPage,
   onDeletePage,
+  onEditPage,
+  onReorderPages,
   onAddPage,
   onBack,
   onCreatePdf,
   isExporting,
 }) {
   const activePage = pages[activePageIndex];
+  const canEdit = Boolean(activePage?.rawSourceDataUrl);
+
+  const movePage = (from, to) => {
+    if (to < 0 || to >= pages.length) return;
+    onReorderPages?.(from, to);
+  };
 
   return (
     <div className="doc-scanner-shell doc-scanner-review-wrap">
@@ -47,11 +55,45 @@ export function ScannerPageReview({
               <> · {activePage.filter === 'bw' ? 'B & W' : 'Auto'}</>
             )}
           </p>
+
+          {pages.length > 1 && (
+            <div className="doc-scanner-review-reorder">
+              <button
+                type="button"
+                className="doc-scanner-reorder-btn"
+                disabled={activePageIndex === 0 || isExporting}
+                onClick={() => movePage(activePageIndex, activePageIndex - 1)}
+                aria-label="Move page earlier"
+              >
+                ← Earlier
+              </button>
+              <button
+                type="button"
+                className="doc-scanner-reorder-btn"
+                disabled={activePageIndex === pages.length - 1 || isExporting}
+                onClick={() => movePage(activePageIndex, activePageIndex + 1)}
+                aria-label="Move page later"
+              >
+                Later →
+              </button>
+            </div>
+          )}
+
+          {canEdit && (
+            <button
+              type="button"
+              className="doc-scanner-edit-page-btn"
+              onClick={() => onEditPage?.(activePageIndex)}
+              disabled={isExporting}
+            >
+              ✏️ Edit crop & filter
+            </button>
+          )}
         </div>
       </div>
 
       <div className="doc-scanner-thumbnail-section">
-        <div className="doc-scanner-thumbnail-label">All pages</div>
+        <div className="doc-scanner-thumbnail-label">All pages — tap to select</div>
         <div className="doc-scanner-thumbnail-strip">
           {pages.map((page, i) => (
             <div
@@ -68,17 +110,45 @@ export function ScannerPageReview({
                 i + 1
               )}
               {pages.length > 1 && (
-                <button
-                  type="button"
-                  className="doc-scanner-thumbnail-delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeletePage(i);
-                  }}
-                  aria-label={`Delete page ${i + 1}`}
-                >
-                  ✕
-                </button>
+                <div className="doc-scanner-thumbnail-actions">
+                  {i > 0 && (
+                    <button
+                      type="button"
+                      className="doc-scanner-thumb-move"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        movePage(i, i - 1);
+                      }}
+                      aria-label={`Move page ${i + 1} left`}
+                    >
+                      ‹
+                    </button>
+                  )}
+                  {i < pages.length - 1 && (
+                    <button
+                      type="button"
+                      className="doc-scanner-thumb-move"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        movePage(i, i + 1);
+                      }}
+                      aria-label={`Move page ${i + 1} right`}
+                    >
+                      ›
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="doc-scanner-thumbnail-delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeletePage(i);
+                    }}
+                    aria-label={`Delete page ${i + 1}`}
+                  >
+                    ✕
+                  </button>
+                </div>
               )}
             </div>
           ))}

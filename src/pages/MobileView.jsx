@@ -3,16 +3,19 @@
  * Mobile upload page — file picker, camera capture, text send, with WebRTC P2P + Hybrid mode
  */
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { ProgressBar } from '../components/ProgressBar';
-import { DocumentScanner } from '../components/DocumentScanner';
 import { getHardwareFingerprint } from '../utils/fingerprint';
 import { stageUploadInQueue, getStagedQueue, clearStagedItem } from '../utils/offlineQueue';
 import { config } from '../config';
+
+const DocumentScanner = lazy(() =>
+  import('../components/DocumentScanner').then((m) => ({ default: m.DocumentScanner }))
+);
 
 const DEVICE_NAME_KEY = 'wifidrop_device_name';
 
@@ -1218,11 +1221,15 @@ export function MobileView() {
         }
       `}</style>
 
-      <DocumentScanner
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        onScanComplete={handleScanComplete}
-      />
+      {isScannerOpen && (
+        <Suspense fallback={null}>
+          <DocumentScanner
+            isOpen={isScannerOpen}
+            onClose={() => setIsScannerOpen(false)}
+            onScanComplete={handleScanComplete}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

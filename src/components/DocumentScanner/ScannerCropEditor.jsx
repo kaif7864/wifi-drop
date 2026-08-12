@@ -1,5 +1,5 @@
 /**
- * ScannerCropEditor.jsx — Interactive crop corners + live filter preview
+ * ScannerCropEditor.jsx — Interactive crop + instant filter preview
  */
 
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -10,7 +10,8 @@ import {
   displayToImage,
   clampCorners,
 } from '../../utils/documentScan/perspectiveTransform';
-import { processScanPage } from '../../utils/documentScan/processScanPage';
+import { processScanPreview } from '../../utils/documentScan/processScanPage';
+import { detectDocumentCornersLite } from '../../utils/documentScan/edgeDetectionLite';
 
 const FILTERS = [
   { id: 'original', label: 'Original', previewClass: 'original' },
@@ -20,8 +21,26 @@ const FILTERS = [
 
 const HANDLE_KEYS = ['tl', 'tr', 'br', 'bl'];
 
+/** Edge midpoints move both corners on that side together */
+const EDGE_HANDLES = [
+  { id: 'top', keys: ['tl', 'tr'] },
+  { id: 'right', keys: ['tr', 'br'] },
+  { id: 'bottom', keys: ['br', 'bl'] },
+  { id: 'left', keys: ['bl', 'tl'] },
+];
+
+function cloneCorners(corners) {
+  return {
+    tl: { ...corners.tl },
+    tr: { ...corners.tr },
+    br: { ...corners.br },
+    bl: { ...corners.bl },
+  };
+}
+
 export function ScannerCropEditor({
   pageNumber,
+  isEditing = false,
   sourceDataUrl,
   sourceCanvas,
   imageWidth,
@@ -38,7 +57,13 @@ export function ScannerCropEditor({
   const containerRef = useRef(null);
   const [layout, setLayout] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [viewMode, setViewMode] = useState('crop');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [detectingEdges, setDetectingEdges] = useState(false);
+  const [detectMessage, setDetectMessage] = useState(null);
   const [dragging, setDragging] = useState(null);
+  const cornerTimerRef = useRef(null);
+  const dragRef = useRef(null);
 
   const updateLayout = useCallback(() => {
     const el = containerRef.current;
@@ -53,49 +78,145 @@ export function ScannerCropEditor({
     return () => window.removeEventListener('resize', updateLayout);
   }, [updateLayout, sourceDataUrl]);
 
-  // Live preview when corners or filter change
-  useEffect(() => {
-    if (!sourceCanvas || !corners) return;
-
-    const timer = setTimeout(() => {
+  const runPreview = useCallback(
+    (filter, showImmediately = true, maxEdge = 720) => {
+      if (!sourceCanvas || !corners) return;
       try {
-        const result = processScanPage(sourceCanvas, corners, activeFilter);
-        setPreviewUrl(result.thumbnailUrl);
+        if (showImmediately) setPreviewLoading(true);
+        const result = processScanPreview(sourceCanvas, corners, filter, maxEdge);
+        setPreviewUrl(result.dataUrl);
+        if (showImmediately) {
+          setViewMode('preview');
+          setPreviewLoading(false);
+        }
       } catch {
         setPreviewUrl(null);
+        setPreviewLoading(false);
       }
-    }, 120);
+    },
+    [sourceCanvas, corners]
+  );
 
-    return () => clearTimeout(timer);
-  }, [sourceCanvas, corners, activeFilter]);
+  // Initial preview on mount
+  useEffect(() => {
+    runPreview(activeFilter, false);
+  }, [sourceCanvas]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handlePointerDown = (key, e) => {
+  // Debounced preview when corners move in crop mode (400px while dragging for speed)
+  useEffect(() => {
+    if (!sourceCanvas || !corners || viewMode !== 'crop') return;
+
+    const maxEdge = dragging ? 400 : 720;
+
+    if (cornerTimerRef.current) clearTimeout(cornerTimerRef.current);
+    cornerTimerRef.current = setTimeout(() => {
+      runPreview(activeFilter, false, maxEdge);
+    }, dragging ? 80 : 180);
+
+    return () => {
+      if (cornerTimerRef.current) clearTimeout(cornerTimerRef.current);
+    };
+  }, [corners, sourceCanvas, activeFilter, viewMode, runPreview, dragging]);
+
+  const handleFilterClick = (filterId) => {
+    onFilterChange(filterId);
+    runPreview(filterId, true);
+  };
+
+  const handleAutoDetect = () => {
+    if (!sourceCanvas || detectingEdges) return;
+    setDetectingEdges(true);
+    setDetectMessage(null);
+    setViewMode('crop');
+
+    // Run off main stack so spinner paints first
+    setTimeout(() => {
+      try {
+        const result = detectDocumentCornersLite(sourceCanvas, imageWidth, imageHeight);
+        if (result) {
+          onCornersChange(result);
+          setDetectMessage(null);
+        } else {
+          setDetectMessage('Edges not found — drag corners manually');
+        }
+      } catch {
+        setDetectMessage('Detection failed — drag corners manually');
+      } finally {
+        setDetectingEdges(false);
+      }
+    }, 16);
+  };
+
+  const getPointerImagePoint = useCallback(
+    (e) => {
+      const el = containerRef.current;
+      if (!el || !layout) return null;
+      const rect = el.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return displayToImage(
+        { x: clientX - rect.left, y: clientY - rect.top },
+        layout
+      );
+    },
+    [layout]
+  );
+
+  const handleCornerPointerDown = (key, e) => {
     e.preventDefault();
-    setDragging(key);
+    setViewMode('crop');
+    dragRef.current = { type: 'corner', key };
+    setDragging(`corner-${key}`);
+  };
+
+  const handleEdgePointerDown = (edgeId, keys, e) => {
+    e.preventDefault();
+    setViewMode('crop');
+    const startPt = getPointerImagePoint(e);
+    if (!startPt || !corners) return;
+    dragRef.current = {
+      type: 'edge',
+      edgeId,
+      keys,
+      startPt,
+      startCorners: cloneCorners(corners),
+    };
+    setDragging(`edge-${edgeId}`);
   };
 
   useEffect(() => {
     if (!dragging || !layout) return;
 
     const onMove = (e) => {
-      const el = containerRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const pt = displayToImage(
-        { x: clientX - rect.left, y: clientY - rect.top },
-        layout
-      );
-      const next = clampCorners(
-        { ...corners, [dragging]: pt },
-        imageWidth,
-        imageHeight
-      );
-      onCornersChange(next);
+      const drag = dragRef.current;
+      if (!drag || !corners) return;
+
+      const pt = getPointerImagePoint(e);
+      if (!pt) return;
+
+      if (drag.type === 'corner') {
+        onCornersChange(clampCorners({ ...corners, [drag.key]: pt }, imageWidth, imageHeight));
+        return;
+      }
+
+      if (drag.type === 'edge') {
+        const dx = pt.x - drag.startPt.x;
+        const dy = pt.y - drag.startPt.y;
+        const next = cloneCorners(drag.startCorners);
+        for (const key of drag.keys) {
+          next[key] = {
+            x: drag.startCorners[key].x + dx,
+            y: drag.startCorners[key].y + dy,
+          };
+        }
+        onCornersChange(clampCorners(next, imageWidth, imageHeight));
+      }
     };
 
-    const onUp = () => setDragging(null);
+    const onUp = () => {
+      dragRef.current = null;
+      setDragging(null);
+    };
 
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -108,11 +229,21 @@ export function ScannerCropEditor({
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [dragging, layout, corners, imageWidth, imageHeight, onCornersChange]);
+  }, [dragging, layout, corners, imageWidth, imageHeight, onCornersChange, getPointerImagePoint]);
 
   const getHandleStyle = (key) => {
     if (!layout || !corners?.[key]) return {};
     const pos = imageToDisplay(corners[key], layout);
+    return { left: `${pos.x}px`, top: `${pos.y}px` };
+  };
+
+  const getEdgeMidpointStyle = (keyA, keyB) => {
+    if (!layout || !corners?.[keyA] || !corners?.[keyB]) return {};
+    const mid = {
+      x: (corners[keyA].x + corners[keyB].x) / 2,
+      y: (corners[keyA].y + corners[keyB].y) / 2,
+    };
+    const pos = imageToDisplay(mid, layout);
     return { left: `${pos.x}px`, top: `${pos.y}px` };
   };
 
@@ -128,70 +259,125 @@ export function ScannerCropEditor({
     <div className="doc-scanner-shell">
       <ScannerHeader
         icon="✂️"
-        title={`Adjust Page ${pageNumber}`}
-        subtitle={<>Drag corners · Pick a filter</>}
+        title={isEditing ? `Edit Page ${pageNumber}` : `Adjust Page ${pageNumber}`}
+        subtitle={<>Drag corners or edge midpoints · Tap filter to preview</>}
         onBack={onRetake}
       />
       <ScannerSteps steps={[1, 2, 3, 4]} activeIndex={1} />
 
+      <div className="doc-scanner-crop-mode-tabs">
+        <button
+          type="button"
+          className={`doc-scanner-mode-tab ${viewMode === 'crop' ? 'active' : ''}`}
+          onClick={() => setViewMode('crop')}
+        >
+          ✂️ Crop
+        </button>
+        <button
+          type="button"
+          className={`doc-scanner-mode-tab ${viewMode === 'preview' ? 'active' : ''}`}
+          onClick={() => {
+            runPreview(activeFilter, true);
+          }}
+          disabled={!previewUrl && previewLoading}
+        >
+          👁 Preview
+        </button>
+      </div>
+
       <div className="doc-scanner-crop-wrap">
         <div className="doc-scanner-crop-area" ref={containerRef}>
-          <img
-            src={sourceDataUrl}
-            alt="Captured page"
-            className="doc-scanner-crop-source-img"
-            draggable={false}
-          />
-          {layout && corners && (
-            <svg className="doc-scanner-crop-svg" aria-hidden="true">
-              <polygon points={getPolygonPoints()} className="doc-scanner-crop-polygon" />
-            </svg>
+          {viewMode === 'preview' ? (
+            <div className="doc-scanner-filter-preview-full">
+              {previewLoading && !previewUrl ? (
+                <div className="doc-scanner-preview-loading">
+                  <div className="doc-scanner-spinner" />
+                  <span>Applying filter...</span>
+                </div>
+              ) : previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Filter preview"
+                  className="doc-scanner-filter-preview-img"
+                />
+              ) : null}
+              <span className="doc-scanner-filter-preview-label badge badge-accent">
+                {FILTERS.find((f) => f.id === activeFilter)?.label || 'Preview'}
+              </span>
+            </div>
+          ) : (
+            <>
+              <img
+                src={sourceDataUrl}
+                alt="Captured page"
+                className="doc-scanner-crop-source-img"
+                draggable={false}
+              />
+              {layout && corners && (
+                <svg className="doc-scanner-crop-svg" aria-hidden="true">
+                  <polygon points={getPolygonPoints()} className="doc-scanner-crop-polygon" />
+                </svg>
+              )}
+              {HANDLE_KEYS.map((key) => (
+                <span
+                  key={key}
+                  className="doc-scanner-crop-handle doc-scanner-crop-handle-corner"
+                  style={getHandleStyle(key)}
+                  onPointerDown={(e) => handleCornerPointerDown(key, e)}
+                  role="presentation"
+                />
+              ))}
+              {EDGE_HANDLES.map(({ id, keys }) => (
+                <span
+                  key={id}
+                  className="doc-scanner-crop-handle doc-scanner-crop-handle-edge"
+                  style={getEdgeMidpointStyle(keys[0], keys[1])}
+                  onPointerDown={(e) => handleEdgePointerDown(id, keys, e)}
+                  role="presentation"
+                  title={`Move ${id} edge`}
+                />
+              ))}
+            </>
           )}
-          {HANDLE_KEYS.map((key) => (
-            <span
-              key={key}
-              className="doc-scanner-crop-handle"
-              style={getHandleStyle(key)}
-              onPointerDown={(e) => handlePointerDown(key, e)}
-              role="presentation"
-            />
-          ))}
         </div>
 
         <div className="doc-scanner-filter-section">
-          <div className="flex items-center justify-between mb-2">
-            <span className="doc-scanner-filter-label" style={{ marginBottom: 0 }}>Enhance</span>
-            {previewUrl && (
-              <div className="doc-scanner-filter-preview-tag">
-                <img src={previewUrl} alt="Preview" />
-                <span>Live Preview</span>
-              </div>
-            )}
-          </div>
+          <div className="doc-scanner-filter-label">Enhance — tap to preview</div>
           <div className="doc-scanner-filter-bar">
             {FILTERS.map((f) => (
               <button
                 key={f.id}
                 type="button"
                 className={`doc-scanner-filter-pill ${activeFilter === f.id ? 'active' : ''}`}
-                onClick={() => onFilterChange(f.id)}
+                onClick={() => handleFilterClick(f.id)}
               >
                 <span className={`doc-scanner-filter-preview ${f.previewClass}`} />
                 {f.label}
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className="doc-scanner-autodetect-btn"
+            onClick={handleAutoDetect}
+            disabled={detectingEdges || isProcessing}
+          >
+            {detectingEdges ? 'Detecting…' : '✨ Auto-detect edges'}
+          </button>
+          {detectMessage && (
+            <p className="doc-scanner-detect-msg">{detectMessage}</p>
+          )}
         </div>
 
         <div className="doc-scanner-crop-actions">
           <button type="button" className="btn btn-ghost" onClick={onRetake} disabled={isProcessing}>
             Retake
           </button>
-          <button type="button" className="btn btn-ghost" onClick={onAddPage} disabled={isProcessing}>
+          <button type="button" className="btn btn-ghost" onClick={onAddPage} disabled={isProcessing || isEditing}>
             + Page
           </button>
           <button type="button" className="btn btn-primary" onClick={onDone} disabled={isProcessing}>
-            {isProcessing ? 'Processing...' : 'Done ✓'}
+            {isProcessing ? 'Processing...' : isEditing ? 'Save ✓' : 'Done ✓'}
           </button>
         </div>
       </div>

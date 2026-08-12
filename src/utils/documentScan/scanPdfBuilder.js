@@ -2,8 +2,6 @@
  * scanPdfBuilder.js — Merge processed scan pages into a single PDF File
  */
 
-import { jsPDF } from 'jspdf';
-
 const MAX_PAGES = 20;
 const JPEG_QUALITY = 0.88;
 
@@ -18,6 +16,8 @@ export async function buildScanPdfFile(pages) {
   if (pages.length > MAX_PAGES) {
     throw new Error(`Maximum ${MAX_PAGES} pages per scan`);
   }
+
+  const { jsPDF } = await import('jspdf');
 
   let pdf = null;
 

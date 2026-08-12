@@ -34,6 +34,31 @@ export function processScanPage(source, corners, filter) {
   };
 }
 
+/**
+ * Fast lower-res preview for instant filter / crop feedback
+ * @param {HTMLImageElement | HTMLCanvasElement} source
+ * @param {import('./perspectiveTransform').Corners} corners
+ * @param {'original'|'auto'|'bw'} filter
+ * @param {number} maxEdge
+ */
+export function processScanPreview(source, corners, filter, maxEdge = 720) {
+  const imgW = source instanceof HTMLCanvasElement ? source.width : source.naturalWidth;
+  const imgH = source instanceof HTMLCanvasElement ? source.height : source.naturalHeight;
+
+  const safeCorners = clampCorners(corners, imgW, imgH);
+  let canvas = warpPerspective(source, safeCorners);
+  canvas = limitCanvasSize(canvas, maxEdge);
+
+  const ctx = canvas.getContext('2d');
+  applyFilter(ctx, canvas.width, canvas.height, filter);
+
+  return {
+    dataUrl: canvas.toDataURL('image/jpeg', 0.82),
+    width: canvas.width,
+    height: canvas.height,
+  };
+}
+
 function createThumbnail(canvas, maxEdge) {
   const scale = Math.min(1, maxEdge / Math.max(canvas.width, canvas.height));
   const w = Math.round(canvas.width * scale);
@@ -70,11 +95,6 @@ export function loadImageFromSource(src) {
   });
 }
 
-/**
- * Capture current video frame to canvas
- * @param {HTMLVideoElement} video
- * @returns {{ canvas: HTMLCanvasElement, dataUrl: string, width: number, height: number }}
- */
 export function captureVideoFrame(video) {
   const width = video.videoWidth;
   const height = video.videoHeight;
@@ -94,4 +114,20 @@ export function captureVideoFrame(video) {
     width,
     height,
   };
+}
+
+/** Recreate canvas from stored JPEG data URL (for page re-edit) */
+export function canvasFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      resolve(canvas);
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = dataUrl;
+  });
 }
