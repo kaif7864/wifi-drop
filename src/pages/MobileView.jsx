@@ -9,6 +9,7 @@ import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { ProgressBar } from '../components/ProgressBar';
+import { DocumentScanner } from '../components/DocumentScanner';
 import { getHardwareFingerprint } from '../utils/fingerprint';
 import { stageUploadInQueue, getStagedQueue, clearStagedItem } from '../utils/offlineQueue';
 import { config } from '../config';
@@ -81,6 +82,7 @@ export function MobileView() {
   const [isP2pUploading, setIsP2pUploading] = useState(false);
   const [textStatus, setTextStatus] = useState(null);
   const [activeMode, setActiveMode] = useState('file'); // 'file' | 'text'
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [customerName, setCustomerName] = useState(() => {
     try { return localStorage.getItem('wifidrop_customer_name') || ''; } catch { return ''; }
   });
@@ -130,6 +132,12 @@ export function MobileView() {
   const clearAllSelectedFiles = () => {
     setSelectedFiles([]);
     setFileNotes({});
+  };
+
+  const handleScanComplete = ({ fileName }) => {
+    const blob = new Blob([''], { type: 'application/pdf' });
+    const scannedFile = new File([blob], fileName || 'scan_document.pdf', { type: 'application/pdf' });
+    setSelectedFiles((prev) => [...prev, scannedFile]);
   };
 
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
@@ -426,6 +434,15 @@ export function MobileView() {
                   <span className="pick-label">Camera</span>
                   <span className="pick-sub">Live photo</span>
                 </label>
+                <button
+                  type="button"
+                  className="pick-card glass-card pick-card-scan"
+                  onClick={() => setIsScannerOpen(true)}
+                >
+                  <span className="pick-icon">📝</span>
+                  <span className="pick-label">Scan Document</span>
+                  <span className="pick-sub">Multi-page PDF</span>
+                </button>
               </div>
 
               {/* Selected file tray with accumulation & individual delete (X) */}
@@ -922,8 +939,41 @@ export function MobileView() {
 
         .pick-buttons {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(2, 1fr);
           gap: 10px;
+        }
+
+        .pick-card-scan {
+          border: 1px solid var(--border-accent);
+          background: linear-gradient(145deg, var(--bg-secondary) 0%, var(--accent-light) 100%);
+          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.08);
+        }
+
+        .pick-card-scan:hover,
+        .pick-card-scan:active {
+          border-color: var(--accent-primary);
+          box-shadow: 0 6px 18px rgba(79, 70, 229, 0.15);
+        }
+
+        .pick-card-scan .pick-icon {
+          background: var(--accent-light);
+          width: 44px;
+          height: 44px;
+          border-radius: var(--radius-md);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--border-accent);
+        }
+
+        .pick-card-scan .pick-label {
+          color: var(--accent-primary);
+          font-weight: 700;
+        }
+
+        .pick-card-scan .pick-sub {
+          color: var(--accent-secondary);
+          font-weight: 600;
         }
 
         .btn-remove-selected {
@@ -968,6 +1018,14 @@ export function MobileView() {
           text-align: center;
           transition: all var(--transition-base);
           min-height: 120px;
+          width: 100%;
+          font-family: inherit;
+          box-sizing: border-box;
+        }
+
+        button.pick-card {
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
         }
 
         .pick-card:hover, .pick-card:active {
@@ -1080,6 +1138,12 @@ export function MobileView() {
           border: 1px solid rgba(255,92,92,0.3);
         }
       `}</style>
+
+      <DocumentScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanComplete={handleScanComplete}
+      />
     </div>
   );
 }

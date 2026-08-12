@@ -1,0 +1,1 @@
+export { DocumentScanner } from './DocumentScanner';
