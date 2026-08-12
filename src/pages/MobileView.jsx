@@ -134,10 +134,9 @@ export function MobileView() {
     setFileNotes({});
   };
 
-  const handleScanComplete = ({ fileName }) => {
-    const blob = new Blob([''], { type: 'application/pdf' });
-    const scannedFile = new File([blob], fileName || 'scan_document.pdf', { type: 'application/pdf' });
-    setSelectedFiles((prev) => [...prev, scannedFile]);
+  const handleScanComplete = (file) => {
+    if (!file) return;
+    setSelectedFiles((prev) => [...prev, file]);
   };
 
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
@@ -419,29 +418,37 @@ export function MobileView() {
 
               {/* Pick buttons */}
               <div className="pick-buttons">
-                <label htmlFor="gallery-picker" className="pick-card glass-card">
-                  <span className="pick-icon">🖼️</span>
+                <label htmlFor="gallery-picker" className="pick-card pick-card-gallery">
+                  <div className="pick-icon-box">
+                    <span className="pick-icon">🖼️</span>
+                  </div>
                   <span className="pick-label">Photos & Gallery</span>
                   <span className="pick-sub">Phone photos</span>
                 </label>
-                <label htmlFor="doc-picker" className="pick-card glass-card">
-                  <span className="pick-icon">📄</span>
+                <label htmlFor="doc-picker" className="pick-card pick-card-docs">
+                  <div className="pick-icon-box">
+                    <span className="pick-icon">📄</span>
+                  </div>
                   <span className="pick-label">PDFs & Docs</span>
                   <span className="pick-sub">Documents</span>
                 </label>
-                <label htmlFor="camera-picker" className="pick-card glass-card">
-                  <span className="pick-icon">📷</span>
+                <label htmlFor="camera-picker" className="pick-card pick-card-camera">
+                  <div className="pick-icon-box">
+                    <span className="pick-icon">📷</span>
+                  </div>
                   <span className="pick-label">Camera</span>
                   <span className="pick-sub">Live photo</span>
                 </label>
                 <button
                   type="button"
-                  className="pick-card glass-card pick-card-scan"
+                  className="pick-card pick-card-scan"
                   onClick={() => setIsScannerOpen(true)}
                 >
-                  <span className="pick-icon">📝</span>
+                  <div className="pick-icon-box pick-icon-box-scan">
+                    <span className="pick-icon">✨</span>
+                  </div>
                   <span className="pick-label">Scan Document</span>
-                  <span className="pick-sub">Multi-page PDF</span>
+                  <span className="pick-sub">Capture & enhance documents</span>
                 </button>
               </div>
 
@@ -581,12 +588,18 @@ export function MobileView() {
 
               {/* Send button */}
               <button
-                className="btn btn-primary w-full"
+                className={`btn-send-main w-full ${selectedFiles.length > 0 ? 'active' : ''}`}
                 onClick={handleUpload}
-                disabled={isCurrentlyTransferring || selectedFiles.length === 0}
-                style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)' }}
+                disabled={isCurrentlyTransferring}
+                style={{ marginTop: 'var(--space-4)' }}
               >
-                {isCurrentlyTransferring ? 'Sending...' : `Send ${selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''} →`}
+                {isCurrentlyTransferring ? (
+                  '🚀 Sending...'
+                ) : selectedFiles.length > 0 ? (
+                  `🚀 Send ${selectedFiles.length} File${selectedFiles.length > 1 ? 's' : ''}`
+                ) : (
+                  '🚀 Select files to send'
+                )}
               </button>
             </motion.div>
           )}
@@ -940,40 +953,147 @@ export function MobileView() {
         .pick-buttons {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
-          gap: 10px;
+          gap: 12px;
+        }
+
+        .pick-card {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 20px 14px 16px;
+          gap: 8px;
+          cursor: pointer;
+          text-align: center;
+          transition: all 0.2s ease;
+          border-radius: 20px;
+          width: 100%;
+          font-family: inherit;
+          box-sizing: border-box;
+          text-decoration: none;
+          position: relative;
+        }
+
+        .pick-card:hover, .pick-card:active {
+          transform: translateY(-2px);
+        }
+
+        .pick-card-gallery {
+          background: linear-gradient(145deg, #E6F7FF 0%, #F0F9FF 100%);
+          border: 1.5px solid #BAE6FD;
+          box-shadow: 0 4px 14px rgba(186, 230, 253, 0.25);
+        }
+        .pick-card-gallery:hover {
+          border-color: #38BDF8;
+          box-shadow: 0 6px 18px rgba(56, 189, 248, 0.3);
+        }
+
+        .pick-card-docs {
+          background: linear-gradient(145deg, #F5F3FF 0%, #FAF5FF 100%);
+          border: 1.5px solid #DDD6FE;
+          box-shadow: 0 4px 14px rgba(221, 214, 254, 0.25);
+        }
+        .pick-card-docs:hover {
+          border-color: #A78BFA;
+          box-shadow: 0 6px 18px rgba(167, 139, 250, 0.3);
+        }
+
+        .pick-card-camera {
+          background: linear-gradient(145deg, #FEFCE8 0%, #FFFBEB 100%);
+          border: 1.5px solid #FDE68A;
+          box-shadow: 0 4px 14px rgba(253, 230, 138, 0.25);
+        }
+        .pick-card-camera:hover {
+          border-color: #FBBF24;
+          box-shadow: 0 6px 18px rgba(251, 191, 36, 0.3);
         }
 
         .pick-card-scan {
-          border: 1px solid var(--border-accent);
-          background: linear-gradient(145deg, var(--bg-secondary) 0%, var(--accent-light) 100%);
-          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.08);
+          background: linear-gradient(145deg, #F3E8FF 0%, #E0F2FE 100%);
+          border: 1.5px solid #C084FC;
+          box-shadow: 0 4px 18px rgba(192, 132, 252, 0.28);
+        }
+        .pick-card-scan:hover, .pick-card-scan:active {
+          border-color: #9333EA;
+          box-shadow: 0 6px 22px rgba(147, 51, 234, 0.35);
         }
 
-        .pick-card-scan:hover,
-        .pick-card-scan:active {
-          border-color: var(--accent-primary);
-          box-shadow: 0 6px 18px rgba(79, 70, 229, 0.15);
-        }
-
-        .pick-card-scan .pick-icon {
-          background: var(--accent-light);
-          width: 44px;
-          height: 44px;
-          border-radius: var(--radius-md);
+        .pick-icon-box {
+          width: 52px;
+          height: 52px;
+          border-radius: 16px;
+          background: #FFFFFF;
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 1px solid var(--border-accent);
+          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+          margin-bottom: 2px;
+          transition: transform 0.2s ease;
+        }
+
+        .pick-card:hover .pick-icon-box {
+          transform: scale(1.06);
+        }
+
+        .pick-icon-box-scan {
+          background: linear-gradient(135deg, #818CF8 0%, #06B6D4 100%);
+          box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+
+        .pick-icon {
+          font-size: 1.6rem;
+          line-height: 1;
+        }
+
+        .pick-label {
+          font-size: 0.92rem;
+          font-weight: 700;
+          color: #0F172A;
         }
 
         .pick-card-scan .pick-label {
-          color: var(--accent-primary);
-          font-weight: 700;
+          color: #7C3AED;
+        }
+
+        .pick-sub {
+          font-size: 0.76rem;
+          color: #64748B;
+          font-weight: 500;
         }
 
         .pick-card-scan .pick-sub {
-          color: var(--accent-secondary);
+          color: #0D9488;
           font-weight: 600;
+        }
+
+        .btn-send-main {
+          width: 100%;
+          padding: 16px;
+          border-radius: 16px;
+          border: none;
+          background: #C7D2FE;
+          color: #FFFFFF;
+          font-family: inherit;
+          font-size: 0.95rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          box-shadow: 0 2px 8px rgba(199, 210, 254, 0.4);
+        }
+
+        .btn-send-main.active {
+          background: linear-gradient(135deg, #4F46E5 0%, #6366F1 100%);
+          color: #FFFFFF;
+          box-shadow: 0 4px 16px rgba(79, 70, 229, 0.35);
+        }
+
+        .btn-send-main.active:hover {
+          background: linear-gradient(135deg, #4338CA 0%, #4F46E5 100%);
+          transform: translateY(-1px);
         }
 
         .btn-remove-selected {
@@ -1005,47 +1125,6 @@ export function MobileView() {
           font-size: 0.72rem;
           font-weight: 700;
           cursor: pointer;
-        }
-
-        .pick-card {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: var(--space-6) var(--space-4);
-          gap: var(--space-2);
-          cursor: pointer;
-          text-align: center;
-          transition: all var(--transition-base);
-          min-height: 120px;
-          width: 100%;
-          font-family: inherit;
-          box-sizing: border-box;
-        }
-
-        button.pick-card {
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-        }
-
-        .pick-card:hover, .pick-card:active {
-          background: var(--bg-glass-hover);
-          border-color: var(--border-accent);
-          box-shadow: var(--shadow-accent);
-          transform: translateY(-2px);
-        }
-
-        .pick-icon { font-size: 2rem; }
-
-        .pick-label {
-          font-size: var(--font-size-sm);
-          font-weight: 600;
-          color: var(--text-primary);
-        }
-
-        .pick-sub {
-          font-size: var(--font-size-xs);
-          color: var(--text-muted);
         }
 
         .selected-files {

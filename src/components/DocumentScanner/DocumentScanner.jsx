@@ -1,48 +1,48 @@
 /**
  * DocumentScanner.jsx
- * Adobe Scan-style fullscreen document scanner — UI shell with step navigation
- * Logic (camera, crop, PDF) wired in later; UI-only for now
+ * Full document scan flow: camera → crop → review → PDF export
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScannerCamera } from './ScannerCamera';
 import { ScannerCropEditor } from './ScannerCropEditor';
 import { ScannerPageReview } from './ScannerPageReview';
 import { ScannerExporting } from './ScannerExporting';
 import { ScannerSuccess } from './ScannerSuccess';
+import { defaultCorners } from '../../utils/documentScan/perspectiveTransform';
+import { loadImageFromSource, processScanPage } from '../../utils/documentScan/processScanPage';
+import { buildScanPdfFile, formatFileSize } from '../../utils/documentScan/scanPdfBuilder';
 import './DocumentScanner.css';
 
 /** @typedef {'camera' | 'crop' | 'review' | 'exporting' | 'success'} ScannerStep */
 
 let pageIdCounter = 0;
-function createPage(filter = 'original') {
+function nextPageId() {
   pageIdCounter += 1;
-  return { id: `page_${pageIdCounter}`, filter };
-}
-
-function mockPdfFileName() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `scan_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.pdf`;
+  return `page_${pageIdCounter}`;
 }
 
 export function DocumentScanner({ isOpen, onClose, onScanComplete }) {
-  /** @type {[ScannerStep, Function]} */
   const [step, setStep] = useState('camera');
   const [pages, setPages] = useState([]);
-  const [activeFilter, setActiveFilter] = useState('original');
+  const [draft, setDraft] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [exportProgress, setExportProgress] = useState(0);
-  const [resultMeta, setResultMeta] = useState({ fileName: '', fileSize: '—' });
+  const [resultFile, setResultFile] = useState(null);
+
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
 
   const resetScanner = useCallback(() => {
     setStep('camera');
     setPages([]);
-    setActiveFilter('original');
+    setDraft(null);
+    setIsProcessing(false);
     setActivePageIndex(0);
     setExportProgress(0);
-    setResultMeta({ fileName: '', fileSize: '—' });
+    setResultFile(null);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -50,7 +50,6 @@ export function DocumentScanner({ isOpen, onClose, onScanComplete }) {
     onClose?.();
   }, [onClose, resetScanner]);
 
-  // Lock body scroll when open
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -58,51 +57,113 @@ export function DocumentScanner({ isOpen, onClose, onScanComplete }) {
     return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
-  const handleCapture = () => setStep('crop');
+  const openDraftFromCapture = useCallback(({ dataUrl, width, height, canvas }) => {
+    setDraft({
+      sourceDataUrl: dataUrl,
+      sourceCanvas: canvas,
+      width,
+      height,
+      corners: defaultCorners(width, height),
+      filter: 'original',
+    });
+    setStep('crop');
+  }, []);
 
-  const handleRetake = () => setStep('camera');
+  const openDraftFromFile = useCallback(async (file) => {
+    try {
+      const img = await loadImageFromSource(file);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
-  const handleAddPage = () => {
-    const newPage = createPage(activeFilter);
-    setPages((prev) => [...prev, newPage]);
+      openDraftFromCapture({
+        dataUrl,
+        width: canvas.width,
+        height: canvas.height,
+        canvas,
+      });
+    } catch (err) {
+      console.warn('[DocumentScanner] Gallery import failed:', err.message);
+    }
+  }, [openDraftFromCapture]);
+
+  const commitDraft = useCallback(async (goToReview = false) => {
+    if (!draft?.sourceCanvas) return null;
+
+    setIsProcessing(true);
+    try {
+      const processed = processScanPage(
+        draft.sourceCanvas,
+        draft.corners,
+        draft.filter
+      );
+
+      const page = {
+        id: nextPageId(),
+        filter: draft.filter,
+        ...processed,
+      };
+
+      setPages((prev) => [...prev, page]);
+      setDraft(null);
+      setStep(goToReview ? 'review' : 'camera');
+      setActivePageIndex(pagesRef.current.length);
+      return page;
+    } catch (err) {
+      console.error('[DocumentScanner] Process page failed:', err);
+      return null;
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [draft]);
+
+  const handleRetake = () => {
+    setDraft(null);
     setStep('camera');
   };
 
-  const handleCropDone = () => {
-    const newPage = createPage(activeFilter);
-    setPages((prev) => [...prev, newPage]);
-    setStep('review');
-    setActivePageIndex(pages.length);
+  const handleAddPage = async () => {
+    await commitDraft(false);
   };
 
-  const handleReviewPages = () => setStep('review');
+  const handleCropDone = async () => {
+    await commitDraft(true);
+  };
 
-  const handleCreatePdf = () => {
+  const handleReviewPages = () => {
+    if (pages.length > 0) setStep('review');
+  };
+
+  const handleCreatePdf = async () => {
+    if (pages.length === 0) return;
+
     setStep('exporting');
-    setExportProgress(0);
+    setExportProgress(10);
 
-    // Mock export animation
-    let p = 0;
-    const interval = setInterval(() => {
-      p += 12;
-      setExportProgress(Math.min(p, 100));
-      if (p >= 100) {
-        clearInterval(interval);
-        const fileName = mockPdfFileName();
-        const mockSize = `${(pages.length * 180 + 120).toFixed(0)} KB`;
-        setResultMeta({ fileName, fileSize: mockSize });
-        setStep('success');
-      }
-    }, 180);
+    try {
+      setExportProgress(40);
+      const file = await buildScanPdfFile(
+        pages.map((p) => ({
+          dataUrl: p.dataUrl,
+          width: p.width,
+          height: p.height,
+        }))
+      );
+      setExportProgress(100);
+      setResultFile(file);
+      setStep('success');
+    } catch (err) {
+      console.error('[DocumentScanner] PDF export failed:', err);
+      setStep('review');
+    }
   };
 
   const handleAddToTray = () => {
-    // UI-only: mock File placeholder for parent integration later
-    onScanComplete?.({
-      fileName: resultMeta.fileName,
-      pageCount: pages.length,
-      mock: true,
-    });
+    if (resultFile) {
+      onScanComplete?.(resultFile);
+    }
     handleClose();
   };
 
@@ -132,55 +193,42 @@ export function DocumentScanner({ isOpen, onClose, onScanComplete }) {
         >
           <AnimatePresence mode="wait">
             {step === 'camera' && (
-              <motion.div
-                key="camera"
-                style={{ display: 'contents' }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
+              <motion.div key="camera" style={{ display: 'contents' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <ScannerCamera
+                  isActive={isOpen && step === 'camera'}
                   pageCount={pages.length}
-                  onCapture={handleCapture}
+                  onCapture={openDraftFromCapture}
+                  onImportImage={openDraftFromFile}
                   onReviewPages={handleReviewPages}
                   onClose={handleClose}
                 />
               </motion.div>
             )}
 
-            {step === 'crop' && (
-              <motion.div
-                key="crop"
-                style={{ display: 'contents' }}
-                initial={{ opacity: 0, x: 40 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -40 }}
-              >
+            {step === 'crop' && draft && (
+              <motion.div key="crop" style={{ display: 'contents' }} initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}>
                 <ScannerCropEditor
                   pageNumber={pages.length + 1}
-                  activeFilter={activeFilter}
-                  onFilterChange={setActiveFilter}
+                  sourceDataUrl={draft.sourceDataUrl}
+                  sourceCanvas={draft.sourceCanvas}
+                  imageWidth={draft.width}
+                  imageHeight={draft.height}
+                  corners={draft.corners}
+                  onCornersChange={(corners) => setDraft((d) => ({ ...d, corners }))}
+                  activeFilter={draft.filter}
+                  onFilterChange={(filter) => setDraft((d) => ({ ...d, filter }))}
                   onRetake={handleRetake}
-                  onAddPage={() => {
-                    const newPage = createPage(activeFilter);
-                    setPages((prev) => [...prev, newPage]);
-                    setStep('camera');
-                  }}
+                  onAddPage={handleAddPage}
                   onDone={handleCropDone}
+                  isProcessing={isProcessing}
                 />
               </motion.div>
             )}
 
-            {step === 'review' && (
-              <motion.div
-                key="review"
-                style={{ display: 'contents' }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
+            {step === 'review' && pages.length > 0 && (
+              <motion.div key="review" style={{ display: 'contents' }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                 <ScannerPageReview
-                  pages={pages.length > 0 ? pages : [createPage()]}
+                  pages={pages}
                   activePageIndex={activePageIndex}
                   onSelectPage={setActivePageIndex}
                   onDeletePage={handleDeletePage}
@@ -192,29 +240,17 @@ export function DocumentScanner({ isOpen, onClose, onScanComplete }) {
             )}
 
             {step === 'exporting' && (
-              <motion.div
-                key="exporting"
-                style={{ display: 'contents' }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
+              <motion.div key="exporting" style={{ display: 'contents' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <ScannerExporting progress={exportProgress} />
               </motion.div>
             )}
 
-            {step === 'success' && (
-              <motion.div
-                key="success"
-                style={{ display: 'contents' }}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-              >
+            {step === 'success' && resultFile && (
+              <motion.div key="success" style={{ display: 'contents' }} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
                 <ScannerSuccess
                   pageCount={pages.length}
-                  fileName={resultMeta.fileName}
-                  fileSize={resultMeta.fileSize}
+                  fileName={resultFile.name}
+                  fileSize={formatFileSize(resultFile.size)}
                   onAddToTray={handleAddToTray}
                   onScanMore={resetScanner}
                 />

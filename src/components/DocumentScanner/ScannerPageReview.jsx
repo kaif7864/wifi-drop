@@ -12,6 +12,7 @@ export function ScannerPageReview({
   onAddPage,
   onBack,
   onCreatePdf,
+  isExporting,
 }) {
   const activePage = pages[activePageIndex];
 
@@ -27,11 +28,19 @@ export function ScannerPageReview({
 
       <div className="doc-scanner-review-main">
         <div className="doc-scanner-review-preview-wrap">
-          <div className="doc-scanner-review-preview">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="doc-scanner-review-preview-line" />
-            ))}
-          </div>
+          {activePage?.dataUrl ? (
+            <img
+              src={activePage.dataUrl}
+              alt={`Page ${activePageIndex + 1}`}
+              className="doc-scanner-review-preview-img"
+            />
+          ) : (
+            <div className="doc-scanner-review-preview">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="doc-scanner-review-preview-line" />
+              ))}
+            </div>
+          )}
           <p className="doc-scanner-review-page-label">
             Page <span>{activePageIndex + 1}</span> of {pages.length}
             {activePage?.filter && activePage.filter !== 'original' && (
@@ -53,7 +62,11 @@ export function ScannerPageReview({
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && onSelectPage(i)}
             >
-              {i + 1}
+              {page.thumbnailUrl ? (
+                <img src={page.thumbnailUrl} alt={`Page ${i + 1}`} className="doc-scanner-thumb-img" />
+              ) : (
+                i + 1
+              )}
               {pages.length > 1 && (
                 <button
                   type="button"
@@ -76,11 +89,11 @@ export function ScannerPageReview({
       </div>
 
       <div className="doc-scanner-review-actions">
-        <button type="button" className="btn btn-ghost" onClick={onAddPage}>
+        <button type="button" className="btn btn-ghost" onClick={onAddPage} disabled={isExporting}>
           + Add Page
         </button>
-        <button type="button" className="btn btn-primary" onClick={onCreatePdf}>
-          Create PDF ({pages.length} pg)
+        <button type="button" className="btn btn-primary" onClick={onCreatePdf} disabled={isExporting}>
+          {isExporting ? 'Creating...' : `Create PDF (${pages.length} pg)`}
         </button>
       </div>
     </div>

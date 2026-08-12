@@ -3,6 +3,7 @@
  */
 
 export function ScannerHeader({ icon = '📝', title, subtitle, onBack, onClose, backLabel = '✕' }) {
+  const isSuccessHeader = icon === '✅' || icon === '✔️';
   return (
     <header className="doc-scanner-header">
       <div className="doc-scanner-header-left">
@@ -14,7 +15,7 @@ export function ScannerHeader({ icon = '📝', title, subtitle, onBack, onClose,
         >
           {onBack ? '←' : backLabel}
         </button>
-        <div className="doc-scanner-header-icon">{icon}</div>
+        <div className={`doc-scanner-header-icon ${isSuccessHeader ? 'success-icon-bg' : ''}`}>{icon}</div>
         <div className="doc-scanner-header-text">
           <div className="doc-scanner-header-title">{title}</div>
           {subtitle && <div className="doc-scanner-header-sub">{subtitle}</div>}
