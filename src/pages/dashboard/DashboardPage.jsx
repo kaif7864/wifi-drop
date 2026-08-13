@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { getLast7DaysActivity } from '../../utils/activity';
 
 function StatCard({ icon, label, value, color = '#4F46E5', bg = '#EEF2FF', trend }) {
   return (
@@ -31,13 +32,110 @@ function StatCard({ icon, label, value, color = '#4F46E5', bg = '#EEF2FF', trend
   );
 }
 
-function ActivityBar({ day, pct }) {
+function ActivityAreaChart({ data }) {
+  if (!data || !data.length) return null;
+
+  const width = 420;
+  const height = 110;
+  const paddingX = 28;
+  const paddingTop = 22;
+  const paddingBottom = 22;
+
+  const maxVal = Math.max(...data.map((d) => d.count), 1);
+  const chartHeight = height - paddingTop - paddingBottom;
+  const stepX = (width - paddingX * 2) / (data.length - 1);
+
+  const points = data.map((d, i) => {
+    const x = paddingX + i * stepX;
+    const y = height - paddingBottom - (d.count / maxVal) * chartHeight;
+    return { x, y, day: d.day, count: d.count };
+  });
+
+  // Generate smooth cubic bezier curve
+  let pathD = `M ${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cp1x = p0.x + (p1.x - p0.x) / 2;
+    const cp1y = p0.y;
+    const cp2x = p0.x + (p1.x - p0.x) / 2;
+    const cp2y = p1.y;
+    pathD += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p1.x},${p1.y}`;
+  }
+
+  const areaD = `${pathD} L ${points[points.length - 1].x},${height - 10} L ${points[0].x},${height - 10} Z`;
+
   return (
-    <div className="activity-bar-col">
-      <div className="activity-bar-track">
-        <div className="activity-bar-fill" style={{ height: `${pct}%` }} />
-      </div>
-      <span className="activity-bar-day">{day}</span>
+    <div className="activity-wave-container">
+      <svg viewBox={`0 0 ${width} ${height + 22}`} className="activity-wave-svg" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="activityAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4F46E5" stopOpacity="0.32" />
+            <stop offset="100%" stopColor="#818CF8" stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+
+        {/* Gradient Filled Wave Area */}
+        <path d={areaD} fill="url(#activityAreaGrad)" />
+
+        {/* Smooth Curved Line */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke="#4F46E5"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Data Points & Badges */}
+        {points.map((p, i) => (
+          <g key={i} className="wave-point-group">
+            {p.count > 0 && (
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="7"
+                fill="#4F46E5"
+                opacity="0.22"
+              />
+            )}
+
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r="4.5"
+              fill={p.count > 0 ? '#4F46E5' : '#CBD5E1'}
+              stroke="#FFFFFF"
+              strokeWidth="2"
+            />
+
+            <text
+              x={p.x}
+              y={p.y - 8}
+              textAnchor="middle"
+              className="wave-count-text"
+              fill={p.count > 0 ? '#4F46E5' : '#94A3B8'}
+              fontSize="11"
+              fontWeight={p.count > 0 ? '800' : '600'}
+            >
+              {p.count}
+            </text>
+
+            <text
+              x={p.x}
+              y={height + 15}
+              textAnchor="middle"
+              className="wave-day-text"
+              fill="#64748B"
+              fontSize="10.5"
+              fontWeight="700"
+            >
+              {p.day}
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
@@ -45,6 +143,37 @@ function ActivityBar({ day, pct }) {
 export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
   const [tempQrCust, setTempQrCust] = useState('');
   const [tempQrExpiry, setTempQrExpiry] = useState('1h');
+  const [custSearch, setCustSearch] = useState('');
+
+  // Extract distinct unique customers from files & texts
+  const customerOptions = useMemo(() => {
+    const map = {};
+    [...files, ...texts].forEach((item) => {
+      const cid = item.customerId || 'cust_anonymous';
+      const name = item.customerName || item.deviceName || 'Anonymous';
+      if (!map[cid]) {
+        map[cid] = {
+          id: cid,
+          name: name,
+          device: item.deviceName || '',
+        };
+      }
+      if (item.customerName && item.customerName.trim()) {
+        map[cid].name = item.customerName.trim();
+      }
+    });
+    return Object.values(map);
+  }, [files, texts]);
+
+  const filteredCustomerOptions = useMemo(() => {
+    if (!custSearch) return customerOptions;
+    const q = custSearch.toLowerCase();
+    return customerOptions.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      c.device.toLowerCase().includes(q) ||
+      c.id.toLowerCase().includes(q)
+    );
+  }, [customerOptions, custSearch]);
 
   // Compute today's stats
   const today = new Date().toDateString();
@@ -52,23 +181,35 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
   const pendingPrint = useMemo(() => files.filter((f) => !f.printedStatus), [files]);
   const uniqueCustomers = useMemo(() => new Set(files.map((f) => f.customerId || 'anon')).size, [files]);
 
-  // Last 7 days activity (file count per day)
+  // Last 7 days activity (file + text count per day)
   const activityData = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const counts = new Array(7).fill(0);
-    const now = new Date();
+    return getLast7DaysActivity(files, texts);
+  }, [files, texts]);
+
+  const totalWeeklyActivity = useMemo(() => {
+    return activityData.reduce((acc, d) => acc + d.count, 0);
+  }, [activityData]);
+
+  const peakDayData = useMemo(() => {
+    if (!activityData.length) return null;
+    return [...activityData].sort((a, b) => b.count - a.count)[0];
+  }, [activityData]);
+
+  const topContentType = useMemo(() => {
+    if (!files.length && !texts.length) return 'None yet';
+    let pdfs = 0, images = 0, docs = 0;
     files.forEach((f) => {
-      const d = new Date(f.savedAt || f.createdAt);
-      const diff = Math.floor((now - d) / 86400000);
-      if (diff >= 0 && diff < 7) counts[6 - diff]++;
+      const name = (f.originalName || '').toLowerCase();
+      const mime = (f.mimeType || '').toLowerCase();
+      if (mime.includes('pdf') || name.endsWith('.pdf')) pdfs++;
+      else if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name)) images++;
+      else docs++;
     });
-    const max = Math.max(...counts, 1);
-    return counts.map((c, i) => ({
-      day: days[(new Date(now - (6 - i) * 86400000)).getDay()],
-      pct: Math.round((c / max) * 100),
-      count: c,
-    }));
-  }, [files]);
+    if (pdfs >= images && pdfs >= docs && pdfs > 0) return `PDFs (${pdfs})`;
+    if (images >= pdfs && images >= docs && images > 0) return `Images (${images})`;
+    if (docs > 0) return `Office (${docs})`;
+    return `${texts.length} Notes`;
+  }, [files, texts]);
 
   const recentItems = useMemo(() => {
     const f = files.map((x) => ({ ...x, _type: 'file', _time: new Date(x.savedAt || x.createdAt).getTime() }));
@@ -110,15 +251,37 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
 
       {/* Main Grid */}
       <div className="dashboard-grid">
-        {/* Activity Chart */}
+        {/* Activity Chart Card */}
         <div className="dash-card activity-card">
           <div className="dash-card-header">
             <h3 className="dash-card-title">📈 Activity — Last 7 Days</h3>
+            <span className="activity-total-chip">{totalWeeklyActivity} Transfers</span>
           </div>
-          <div className="activity-chart">
-            {activityData.map((d, i) => (
-              <ActivityBar key={i} day={d.day} pct={d.pct} />
-            ))}
+          <ActivityAreaChart data={activityData} />
+
+          {/* Activity Insights Strip — Covers bottom blank space */}
+          <div className="activity-insights-row">
+            <div className="insight-pill">
+              <span className="insight-icon">🔥</span>
+              <div>
+                <span className="insight-lbl">Peak Day</span>
+                <span className="insight-val">{peakDayData && peakDayData.count > 0 ? `${peakDayData.day} (${peakDayData.count})` : 'None'}</span>
+              </div>
+            </div>
+            <div className="insight-pill">
+              <span className="insight-icon">⚡</span>
+              <div>
+                <span className="insight-lbl">Daily Average</span>
+                <span className="insight-val">{(totalWeeklyActivity / 7).toFixed(1)} / day</span>
+              </div>
+            </div>
+            <div className="insight-pill">
+              <span className="insight-icon">📄</span>
+              <div>
+                <span className="insight-lbl">Top Content</span>
+                <span className="insight-val">{topContentType}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -192,26 +355,72 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           <div className="dash-card-header">
             <h3 className="dash-card-title">📱 Create Temp QR</h3>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
-              <label className="form-label">Customer Name / Token</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="form-label" style={{ margin: 0 }}>Customer Name / Folder</label>
+                <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
+                  {customerOptions.length} Customers Available
+                </span>
+              </div>
+              
+              {/* Single Smart Searchable Customer Input */}
               <input
                 type="text"
-                className="input input-sm"
-                placeholder="e.g. Ramesh Kumar or Token #5"
+                className="input input-sm w-full"
+                placeholder="🔍 Type or choose customer name / device..."
                 value={tempQrCust}
                 onChange={(e) => setTempQrCust(e.target.value)}
+                list="dash-tempqr-cust-datalist"
+                style={{ width: '100%', boxSizing: 'border-box' }}
               />
+              <datalist id="dash-tempqr-cust-datalist">
+                {customerOptions.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.device && c.device !== c.name ? `${c.name} (${c.device})` : c.name}
+                  </option>
+                ))}
+              </datalist>
+
+              {/* Quick Customer Pill Chips */}
+              {customerOptions.length > 0 && (
+                <div className="temp-cust-chips-row">
+                  {customerOptions.slice(0, 4).map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`temp-cust-chip ${tempQrCust === c.name ? 'active' : ''}`}
+                      onClick={() => setTempQrCust(c.name)}
+                    >
+                      👤 {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
             <div>
-              <label className="form-label">Expires In</label>
-              <select className="input input-sm" value={tempQrExpiry} onChange={(e) => setTempQrExpiry(e.target.value)}>
-                <option value="30m">30 Minutes</option>
-                <option value="1h">1 Hour</option>
-                <option value="4h">4 Hours</option>
-                <option value="24h">24 Hours</option>
-              </select>
+              <label className="form-label mb-1.5" style={{ display: 'block' }}>Expires In</label>
+              <div className="expiry-segmented-group">
+                {[
+                  { value: '30m', label: '30m' },
+                  { value: '1h', label: '1 Hour' },
+                  { value: '2h', label: '2 Hours' },
+                  { value: '4h', label: '4 Hours' },
+                  { value: '24h', label: '24 Hours' },
+                ].map((exp) => (
+                  <button
+                    key={exp.value}
+                    type="button"
+                    className={`expiry-pill-btn ${tempQrExpiry === exp.value ? 'active' : ''}`}
+                    onClick={() => setTempQrExpiry(exp.value)}
+                  >
+                    {exp.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
             <button
               className="btn btn-primary"
               onClick={() => onNavChange('qr_management')}
@@ -226,18 +435,24 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
         .dashboard-page {
           display: flex;
           flex-direction: column;
-          gap: 1.5rem;
+          gap: 1.25rem;
           width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-x: hidden;
         }
 
         .dashboard-greeting {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          padding: 1.5rem 1.75rem;
+          padding: 1.25rem 1.5rem;
           background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
           border-radius: 20px;
           color: white;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .greeting-title {
@@ -321,6 +536,9 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           grid-template-columns: 2fr 1fr;
           grid-template-rows: auto auto;
           gap: 1rem;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .dash-card {
@@ -329,6 +547,10 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           border-radius: 18px;
           padding: 1.25rem 1.5rem;
           box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
         }
 
         .dash-card-header {
@@ -336,43 +558,49 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           align-items: center;
           justify-content: space-between;
           margin-bottom: 1rem;
+          width: 100%;
         }
 
         .dash-card-title {
           font-size: 0.95rem;
           font-weight: 800;
           color: #0F172A;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .activity-card {
           grid-column: 1;
           grid-row: 1;
-        }
-
-        .activity-chart {
-          display: flex;
-          align-items: flex-end;
-          gap: 8px;
-          height: 120px;
-        }
-
-        .activity-bar-col {
-          flex: 1;
           display: flex;
           flex-direction: column;
-          align-items: center;
-          gap: 6px;
-          height: 100%;
         }
 
-        .activity-bar-track {
-          flex: 1;
+        .activity-total-chip {
+          font-size: 0.72rem;
+          font-weight: 800;
+          color: #4F46E5;
+          background: #EEF2FF;
+          padding: 3px 10px;
+          border-radius: 999px;
+          border: 1px solid #C7D2FE;
+          flex-shrink: 0;
+        }
+
+        .activity-wave-container {
           width: 100%;
-          background: #F1F5F9;
-          border-radius: 6px;
+          height: 145px;
           display: flex;
-          align-items: flex-end;
-          overflow: hidden;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 8px;
+        }
+
+        .activity-wave-svg {
+          width: 100%;
+          height: 100%;
+          overflow: visible;
         }
 
         .activity-bar-fill {
@@ -385,8 +613,56 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
 
         .activity-bar-day {
           font-size: 10px;
+          font-weight: 800;
+          color: #64748B;
+        }
+
+        .activity-bar-count {
+          font-size: 11px;
+          font-weight: 800;
+          color: #1E293B;
+        }
+
+        .activity-insights-row {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin-top: auto;
+          padding-top: 14px;
+          border-top: 1px solid #F1F5F9;
+        }
+
+        .insight-pill {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 12px;
+          padding: 8px 10px;
+        }
+
+        .insight-icon {
+          font-size: 1.1rem;
+          flex-shrink: 0;
+        }
+
+        .insight-lbl {
+          display: block;
+          font-size: 0.68rem;
           font-weight: 700;
-          color: #94A3B8;
+          color: #64748B;
+          line-height: 1.1;
+        }
+
+        .insight-val {
+          display: block;
+          font-size: 0.8rem;
+          font-weight: 800;
+          color: #0F172A;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .quick-actions-grid {
@@ -501,6 +777,79 @@ export function DashboardPage({ files, texts, onNavChange, sessionId, shop }) {
           font-weight: 700;
           color: #374151;
           margin-bottom: 6px;
+        }
+
+        /* ── Quick Customer Chips ── */
+        .temp-cust-chips-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 6px;
+        }
+
+        .temp-cust-chip {
+          padding: 4px 10px;
+          border-radius: 999px;
+          border: 1px solid #E2E8F0;
+          background: #F8FAFC;
+          color: #475569;
+          font-size: 0.72rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .temp-cust-chip:hover {
+          background: #EEF2FF;
+          border-color: #C7D2FE;
+          color: #4F46E5;
+        }
+
+        .temp-cust-chip.active {
+          background: #4F46E5;
+          border-color: #4F46E5;
+          color: #FFFFFF;
+          box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+        }
+
+        /* ── Segmented Expiry Control ── */
+        .expiry-segmented-group {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 4px;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          padding: 4px;
+          border-radius: 12px;
+        }
+
+        .expiry-pill-btn {
+          padding: 6px 4px;
+          border-radius: 8px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: #64748B;
+          font-size: 0.74rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-align: center;
+          white-space: nowrap;
+        }
+
+        .expiry-pill-btn:hover {
+          background: #FFFFFF;
+          color: #0F172A;
+        }
+
+        .expiry-pill-btn.active {
+          background: #FFFFFF;
+          color: #4F46E5;
+          border-color: #CBD5E1;
+          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
         }
 
         /* ── Responsive Breakpoints ── */

@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { navigate } from '../App';
 
 export function ShopRegister() {
   const { register } = useAuth();
@@ -35,7 +36,7 @@ export function ShopRegister() {
         email,
         password,
       });
-      window.location.href = '/';
+      navigate('/', true); // replaceState — register page removed from history
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed. Try again.');
     } finally {
@@ -97,7 +98,7 @@ export function ShopRegister() {
         </form>
 
         <div className="auth-footer">
-          <p>Already have a shop account? <a href="/login" className="auth-link">Login</a></p>
+          <p>Already have a shop account? <button className="auth-link" style={{background:'none',border:'none',padding:0,cursor:'pointer'}} onClick={() => navigate('/login')}>Login</button></p>
         </div>
       </div>
 

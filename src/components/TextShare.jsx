@@ -6,12 +6,30 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-function formatTime(isoString) {
+function formatDateTime(isoString) {
   if (!isoString) return '';
-  return new Date(isoString).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (isToday) return `Today, ${timeStr}`;
+  if (isYesterday) return `Yesterday, ${timeStr}`;
+
+  const dateStr = date.toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+    ...(date.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
   });
+
+  return `${dateStr}, ${timeStr}`;
 }
 
 function SingleTextCard({ textRecord, onDelete }) {
@@ -50,7 +68,7 @@ function SingleTextCard({ textRecord, onDelete }) {
             </>
           )}
           <span className="meta-dot">·</span>
-          <span>{formatTime(textRecord.receivedAt || textRecord.createdAt)}</span>
+          <span>🕒 {formatDateTime(textRecord.receivedAt || textRecord.createdAt)}</span>
         </div>
       </div>
       <div className="text-actions">

@@ -27,7 +27,7 @@ export function useSocket(role, deviceName = 'Browser', sessionId = null) {
 
   useEffect(() => {
     const socket = io(config.serverUrl, {
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'], // websocket first for production reliability
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       autoConnect: true,
@@ -53,7 +53,11 @@ export function useSocket(role, deviceName = 'Browser', sessionId = null) {
     });
 
     return () => {
-      socket.disconnect();
+      if (socket) {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.disconnect();
+      }
     };
   }, []);
 

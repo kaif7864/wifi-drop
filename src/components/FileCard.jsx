@@ -6,8 +6,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { config } from '../config';
+import { PdfCanvasViewer } from './PdfCanvasViewer';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+const isMobile = () => /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
 const PDF_TYPE = 'application/pdf';
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg'];
 const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3'];
@@ -20,10 +22,34 @@ function formatBytes(bytes) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-function formatTime(isoString) {
+function formatDateTime(isoString) {
   if (!isoString) return '';
   const date = new Date(isoString);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (isToday) {
+    return `Today, ${timeStr}`;
+  }
+  if (isYesterday) {
+    return `Yesterday, ${timeStr}`;
+  }
+
+  const dateStr = date.toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+    ...(date.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+
+  return `${dateStr}, ${timeStr}`;
 }
 
 function getFileIcon(mimeType = '') {
@@ -41,6 +67,7 @@ import { isFileInBill, toggleFileInBill } from '../utils/billManager';
 export function FileCard({ file, onDelete, onTogglePrint }) {
   const [showPreview, setShowPreview] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [imgRotation, setImgRotation] = useState(0);
   const fileId = file.uuid || file.id || file._id;
   const [addedToBill, setAddedToBill] = useState(() => isFileInBill(fileId));
   const isPrinted = file.printedStatus || false;
@@ -116,6 +143,13 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
     window.open(previewUrl, '_blank');
   };
 
+  const handleCopyNote = (e) => {
+    e.stopPropagation();
+    try {
+      navigator.clipboard.writeText(file.note);
+    } catch {}
+  };
+
   const togglePrint = async () => {
     if (onTogglePrint) {
       onTogglePrint(file);
@@ -123,6 +157,51 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
       try {
         await axios.patch(`${config.serverUrl}/api/files/${file.uuid || file.id || file._id}/print`);
       } catch {}
+    }
+  };
+
+  const handlePrintPdf = () => {
+    const iframe = document.querySelector('.preview-iframe');
+    if (iframe && iframe.contentWindow) {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        return;
+      } catch (e) {
+        console.warn('Iframe print error:', e);
+      }
+    }
+    const printWin = window.open(previewUrl, '_blank');
+    if (printWin) {
+      printWin.onload = () => {
+        printWin.print();
+      };
+    }
+  };
+
+  const handlePrintImage = () => {
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Image - ${file.originalName || 'Image'}</title>
+            <style>
+              body { margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: white; }
+              img { max-width: 100%; max-height: 100vh; object-fit: contain; transform: rotate(${imgRotation}deg); }
+              @media print {
+                body { height: auto; }
+                img { max-width: 100%; height: auto; }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${previewUrl}" onload="window.focus(); window.print(); window.close();" />
+          </body>
+        </html>
+      `);
+      printWin.document.close();
     }
   };
 
@@ -157,18 +236,12 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                   padding: '2px 8px',
                   fontSize: '11px',
                   fontWeight: 700,
-                  marginTop: '3px',
-                  marginBottom: '2px',
+                  marginTop: '4px',
                   cursor: 'pointer',
                   width: 'fit-content',
                   maxWidth: '100%',
                 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  try {
-                    navigator.clipboard.writeText(file.note);
-                  } catch {}
-                }}
+                onClick={handleCopyNote}
                 title="Click to copy file password / note"
               >
                 <span>🔑</span>
@@ -185,7 +258,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                 </>
               )}
               <span className="meta-dot">·</span>
-              <span>{formatTime(file.savedAt)}</span>
+              <span className="file-timestamp-tag">🕒 {formatDateTime(file.savedAt || file.uploadedAt || file.createdAt)}</span>
               {file.deviceName && (
                 <>
                   <span className="meta-dot">·</span>
@@ -207,52 +280,57 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
 
         {/* Right: actions */}
         <div className="file-actions">
-          <button
-            className={`btn-print-toggle ${addedToBill ? 'printed' : ''}`}
-            style={{ background: addedToBill ? '#ECFDF5' : '#EEF2FF', color: addedToBill ? '#059669' : '#4F46E5', border: '1px solid #C7D2FE' }}
-            title="Add File to Customer Bill Queue"
-            onClick={handleAddToBill}
-          >
-            {addedToBill ? '✓ Added to Bill' : '💳 Add to Bill'}
-          </button>
-          <button
-            className={`btn-print-toggle ${isPrinted ? 'printed' : ''}`}
-            title="Toggle Printed Status"
-            onClick={togglePrint}
-          >
-            {isPrinted ? '✓ Printed' : '🖨️ Mark Printed'}
-          </button>
-          {canPreview && (
+          <div className="file-pill-actions">
+            <button
+              className={`btn-print-toggle ${addedToBill ? 'printed' : ''}`}
+              style={{ background: addedToBill ? '#ECFDF5' : '#EEF2FF', color: addedToBill ? '#059669' : '#4F46E5', border: '1px solid #C7D2FE' }}
+              title="Add File to Customer Bill Queue"
+              onClick={handleAddToBill}
+            >
+              {addedToBill ? '✓ Bill' : '💳 Add to Bill'}
+            </button>
+            <button
+              className={`btn-print-toggle ${isPrinted ? 'printed' : ''}`}
+              title="Toggle Printed Status"
+              onClick={togglePrint}
+            >
+              {isPrinted ? '✓ Printed' : '🖨️ Print'}
+            </button>
+          </div>
+
+          <div className="file-icon-actions">
+            {canPreview && (
+              <button
+                className="btn-icon"
+                title="Quick Preview"
+                onClick={() => setShowPreview(true)}
+              >
+                👁️
+              </button>
+            )}
             <button
               className="btn-icon"
-              title="Quick Preview"
-              onClick={() => setShowPreview(true)}
+              title="Open in new tab"
+              onClick={handleOpenInNewTab}
             >
-              👁️
+              ↗️
             </button>
-          )}
-          <button
-            className="btn-icon"
-            title="Open in new tab"
-            onClick={handleOpenInNewTab}
-          >
-            ↗️
-          </button>
-          <button
-            className="btn-icon"
-            title="Download file"
-            onClick={handleDownload}
-            disabled={isDownloading}
-          >
-            {isDownloading ? '⏳' : '⬇️'}
-          </button>
-          <button
-            className="btn-icon btn-danger-icon"
-            title="Delete file"
-            onClick={() => onDelete(file.uuid || file.id || file._id)}
-          >
-            🗑️
-          </button>
+            <button
+              className="btn-icon"
+              title="Download file"
+              onClick={handleDownload}
+              disabled={isDownloading}
+            >
+              {isDownloading ? '⏳' : '⬇️'}
+            </button>
+            <button
+              className="btn-icon btn-danger-icon"
+              title="Delete file"
+              onClick={() => onDelete(file.uuid || file.id || file._id)}
+            >
+              🗑️
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -261,31 +339,79 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
         <div className="preview-overlay" onClick={() => setShowPreview(false)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
             <div className="preview-header">
-              <span className="preview-title">{file.originalName}</span>
-              <div className="flex items-center gap-2">
-                <button className="btn btn-ghost btn-sm" onClick={handleOpenInNewTab}>
-                  Open ↗
+              <span className="preview-title" title={file.originalName}>{file.originalName}</span>
+              <div className="preview-header-actions">
+                {isImage && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setImgRotation((r) => (r + 90) % 360)}
+                    title="Rotate Image 90°"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.99 6.57 2.57L21 8" />
+                      <polyline points="21 3 21 8 16 8" />
+                    </svg>
+                    <span className="btn-lbl"> Rotate</span>
+                  </button>
+                )}
+                {isImage && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={handlePrintImage}
+                    style={{ background: '#4F46E5', color: '#FFF' }}
+                    title="Print Image"
+                  >
+                    <span>🖨️</span>
+                    <span className="btn-lbl"> Print</span>
+                  </button>
+                )}
+                <button className="btn btn-ghost btn-sm" onClick={handleOpenInNewTab} title="Open in New Tab">
+                  <span>↗</span>
+                  <span className="btn-lbl"> Open</span>
                 </button>
-                <button className="btn btn-primary btn-sm" onClick={handleDownload}>
-                  Download ⬇
+                {!isMobile() && isPdf && (
+                  <button className="btn btn-primary btn-sm" onClick={handlePrintPdf} style={{ background: '#4F46E5', color: '#FFF' }} title="Print Document">
+                    <span>🖨️</span>
+                    <span className="btn-lbl"> Print</span>
+                  </button>
+                )}
+                <button className="btn btn-secondary btn-sm" onClick={handleDownload} title="Download File">
+                  <span>⬇</span>
+                  <span className="btn-lbl"> Download</span>
                 </button>
-                <button className="btn-icon" onClick={() => setShowPreview(false)}>✕</button>
+                <button className="btn-icon btn-close-preview" onClick={() => setShowPreview(false)} aria-label="Close preview" title="Close">✕</button>
               </div>
             </div>
             <div className="preview-body">
               {isImage && (
-                <img
-                  src={previewUrl}
-                  alt={file.originalName}
-                  className="preview-image"
-                />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', overflow: 'hidden', padding: '12px' }}>
+                  <img
+                    src={previewUrl}
+                    alt={file.originalName}
+                    className="preview-image"
+                    style={{
+                      transform: `rotate(${imgRotation}deg)`,
+                      transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                      maxWidth: '100%',
+                      maxHeight: '65vh',
+                      objectFit: 'contain'
+                    }}
+                  />
+                </div>
               )}
               {isPdf && (
-                <iframe
-                  src={`${previewUrl}#toolbar=1&navpanes=0`}
-                  title={file.originalName}
-                  className="preview-iframe"
-                />
+                isMobile() ? (
+                  <PdfCanvasViewer url={previewUrl} name={file.originalName} note={file.note} />
+                ) : (
+                  <iframe
+                    src={`${previewUrl}#zoom=100&toolbar=1&navpanes=0`}
+                    title={file.originalName}
+                    className="preview-iframe"
+                    style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px' }}
+                  />
+                )
               )}
               {isVideo && (
                 <video controls src={previewUrl} className="preview-video" autoPlay />
@@ -349,6 +475,19 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           gap: var(--space-2);
           flex-shrink: 0;
         }
+
+        .file-pill-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .file-icon-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
         .btn-danger-icon:hover {
           color: var(--danger) !important;
           border-color: rgba(239, 68, 68, 0.4) !important;
@@ -381,12 +520,45 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
         }
         .preview-header {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: var(--space-4) var(--space-6);
+          flex-direction: column;
+          gap: 8px;
+          padding: 0.75rem 1rem;
           border-bottom: 1px solid var(--border);
           background: var(--bg-primary);
+          box-sizing: border-box;
+          width: 100%;
         }
+
+        .preview-header-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+          gap: 8px;
+        }
+
+        .preview-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          overflow-x: auto;
+          width: 100%;
+          box-sizing: border-box;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 2px;
+        }
+
+        .preview-header-actions::-webkit-scrollbar {
+          display: none;
+        }
+
+        .preview-header-actions .btn {
+          flex-shrink: 0;
+          white-space: nowrap;
+          font-size: 0.76rem;
+          padding: 5px 10px;
+        }
+
         .preview-title {
           font-size: var(--font-size-sm);
           font-weight: 600;
@@ -394,7 +566,6 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          max-width: 400px;
         }
         .preview-body {
           flex: 1;
@@ -429,57 +600,132 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
           max-width: 500px;
         }
 
-        /* ── Mobile Responsive Breakpoints ── */
-        @media (max-width: 768px) {
-          .file-card {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 0.75rem;
-            padding: 1rem;
-          }
+          @media (max-width: 768px) {
+            .btn-lbl {
+              display: none !important;
+            }
 
-          .file-actions {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 6px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border);
-            width: 100%;
-          }
+            .file-card {
+              flex-direction: column;
+              align-items: stretch;
+              gap: 0.65rem;
+              padding: 0.85rem 1rem;
+            }
 
-          .file-actions .btn-print-toggle {
-            padding: 5px 10px;
-            font-size: 11px;
-          }
+            .file-actions {
+              display: flex;
+              flex-direction: row;
+              flex-wrap: nowrap;
+              align-items: center;
+              justify-content: space-between;
+              gap: 4px;
+              padding-top: 8px;
+              border-top: 1px solid var(--border);
+              width: 100%;
+              box-sizing: border-box;
+            }
 
-          .preview-overlay {
-            padding: 0.75rem;
-          }
+            .file-pill-actions {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              flex-shrink: 0;
+            }
 
-          .preview-modal {
-            max-height: 90vh;
-          }
+            .file-icon-actions {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              flex-shrink: 0;
+            }
 
-          .preview-header {
-            padding: 0.75rem 1rem;
-          }
+            .file-actions .btn-print-toggle {
+              padding: 5px 8px;
+              font-size: 11px;
+              font-weight: 700;
+              white-space: nowrap;
+            }
 
-          .preview-title {
-            max-width: 160px;
-          }
+            .file-actions .btn-icon {
+              width: 30px;
+              height: 30px;
+              min-width: 30px;
+              padding: 0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+              border-radius: 8px;
+            }
 
-          .preview-body {
-            padding: 1rem;
-            min-height: 220px;
-          }
+            .preview-overlay {
+              padding: max(24px, env(safe-area-inset-top, 24px)) 0 0 0;
+              align-items: flex-end;
+            }
 
-          .preview-iframe, .preview-image, .preview-video {
-            height: 55vh;
-            max-height: 55vh;
+            .preview-modal {
+              max-height: calc(100dvh - 64px);
+              height: calc(100dvh - 64px);
+              border-radius: 20px 20px 0 0;
+              border: none;
+            }
+
+            .preview-header {
+              flex-direction: row;
+              align-items: center;
+              justify-content: space-between;
+              padding: 0.65rem 0.85rem;
+            }
+
+            .preview-header-top {
+              width: auto;
+              flex: 1;
+              min-width: 0;
+            }
+
+            .preview-header-actions {
+              width: auto;
+              overflow-x: visible;
+              gap: 5px;
+            }
+
+            .preview-header-actions .btn {
+              padding: 6px 10px;
+              font-size: 0.95rem;
+              border-radius: 8px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            }
+
+            .preview-header-actions .btn svg {
+              margin-right: 0 !important;
+            }
+
+            .preview-title {
+              max-width: 120px;
+              font-size: 0.82rem;
+            }
+
+            .btn-close-preview {
+              width: 36px;
+              height: 36px;
+              border-radius: 50%;
+              background: #FEF2F2;
+              color: #DC2626;
+              border: 1.5px solid #FCA5A5;
+              font-size: 16px;
+              font-weight: 900;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+
+            .preview-body {
+              padding: 0.5rem;
+              min-height: 220px;
+            }
           }
-        }
       `}</style>
     </>
   );

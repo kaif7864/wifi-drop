@@ -11,7 +11,14 @@ const BASE_URL = config.serverUrl;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
 export function useTransfer(shopId = null) {
-  const isShopOwner = !!(shopId && shopId !== 'guest' && shopId !== 'default' && !shopId.startsWith('wd_'));
+  const isShopOwner = !!(
+    shopId &&
+    shopId !== 'guest' &&
+    shopId !== 'default' &&
+    !shopId.startsWith('wd_') &&
+    !shopId.startsWith('temp_') &&
+    localStorage.getItem('wifidrop_token')
+  );
   const cacheKey = isShopOwner ? `wifidrop_files_cache_${shopId}` : null;
 
   const [files, setFiles] = useState(() => {
@@ -83,14 +90,15 @@ export function useTransfer(shopId = null) {
   // ── Push a file received via socket ──────────────────────────────────────
   const addReceivedFile = useCallback((fileRecord) => {
     if (!fileRecord) return;
-    // Security check: only accept files matching current shop or guest session
-    if (shopId && shopId !== 'guest') {
-      if (fileRecord.shopId && fileRecord.shopId !== 'default' && fileRecord.shopId !== shopId) {
+    const currentShop = (shopId || '').toLowerCase().trim();
+    const recShop = (fileRecord.shopId || 'default').toLowerCase().trim();
+
+    if (currentShop && currentShop !== 'guest' && currentShop !== 'default') {
+      if (recShop && recShop !== 'default' && recShop !== currentShop) {
         return; // Ignore files from another shop
       }
-    } else {
-      // Guest mode: ignore any file belonging to a registered shop
-      if (fileRecord.shopId && fileRecord.shopId !== 'default') {
+    } else if (currentShop === 'guest' || !currentShop || currentShop === 'default') {
+      if (recShop && recShop !== 'default') {
         return;
       }
     }
@@ -107,12 +115,15 @@ export function useTransfer(shopId = null) {
   // ── Push a text received via socket ───────────────────────────────────────
   const addReceivedText = useCallback((textRecord) => {
     if (!textRecord) return;
-    if (shopId && shopId !== 'guest') {
-      if (textRecord.shopId && textRecord.shopId !== 'default' && textRecord.shopId !== shopId) {
+    const currentShop = (shopId || '').toLowerCase().trim();
+    const recShop = (textRecord.shopId || 'default').toLowerCase().trim();
+
+    if (currentShop && currentShop !== 'guest' && currentShop !== 'default') {
+      if (recShop && recShop !== 'default' && recShop !== currentShop) {
         return;
       }
-    } else {
-      if (textRecord.shopId && textRecord.shopId !== 'default') {
+    } else if (currentShop === 'guest' || !currentShop || currentShop === 'default') {
+      if (recShop && recShop !== 'default') {
         return;
       }
     }
@@ -212,11 +223,12 @@ export function useTransfer(shopId = null) {
   }, []);
 
   // ── Fetch existing history on mount ──────────────────────────────────────
-  const fetchHistory = useCallback(async (fetchShopId = null, fetchSessionId = null, fetchToken = null) => {
+  const fetchHistory = useCallback(async (fetchShopId = null, fetchSessionId = null, fetchToken = null, fetchCustomerId = null) => {
     try {
       const params = {};
       if (fetchShopId) params.shopId = fetchShopId;
       if (fetchSessionId) params.session = fetchSessionId;
+      if (fetchCustomerId) params.customerId = fetchCustomerId;
 
       const headers = {};
       const resolvedToken = fetchToken || (fetchShopId ? localStorage.getItem('wifidrop_token') : null);
@@ -232,8 +244,13 @@ export function useTransfer(shopId = null) {
 
       setFiles(fetchedFiles);
       setTexts(fetchedTexts);
-    } catch {
-      // silently fail on history fetch
+      return { files: fetchedFiles, texts: fetchedTexts };
+    } catch (err) {
+      if (err.response?.status === 403 || err.response?.status === 404 || err.response?.data?.expired) {
+        setFiles([]);
+        setTexts([]);
+      }
+      throw err;
     }
   }, []);
 

@@ -8,6 +8,10 @@ import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { config } from '../../config';
+import { ConfirmDeleteFolderModal } from '../../components/ConfirmDeleteFolderModal';
+import { FilePreviewModal } from '../../components/FilePreviewModal';
+import { QRModal } from '../../components/QRModal';
+import { toast } from '../../context/ToastContext';
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -26,12 +30,17 @@ function timeAgo(ts) {
   return `${Math.floor(diff / 86400000)}d ago`;
 }
 
-export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
+export function CustomersPage({ files, texts, onNavChange, onDeleteFolder, shop }) {
   const [searchQ, setSearchQ] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [nicknameInput, setNicknameInput] = useState('');
   const [savingNick, setSavingNick] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [deleteConfirmGroup, setDeleteConfirmGroup] = useState(null);
+  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
+  const [qrCustomer, setQrCustomer] = useState(null);
+  const [editingNick, setEditingNick] = useState(false);
 
   // Build customer groups
   const customers = useMemo(() => {
@@ -85,25 +94,35 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
       await axios.post(`${config.serverUrl}/api/customers/nickname`, {
         customerId: selected.id,
         nickname: nicknameInput.trim(),
+        shopId: shop?.shopId || 'default',
       });
       // Update local objects immediately
       selected.files.forEach((f) => (f.customerName = nicknameInput.trim()));
       selected.texts.forEach((t) => (t.customerName = nicknameInput.trim()));
+      selected.name = nicknameInput.trim();
+      setEditingNick(false);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (err) {
-      alert('Error updating nickname: ' + (err.response?.data?.error || err.message));
+      toast.error('Error updating nickname: ' + (err.response?.data?.error || err.message));
     } finally {
       setSavingNick(false);
     }
   }
 
-  async function handleDeleteCustomer() {
-    if (!selected) return;
-    if (!confirm(`Are you sure you want to delete folder for "${selected.name}"? All files will be deleted from Cloudinary & DB.`)) return;
-    if (onDeleteFolder) {
-      await onDeleteFolder(selected.id);
-      setSelectedId(null);
+  async function handleConfirmPermanentDelete() {
+    if (!deleteConfirmGroup) return;
+    try {
+      setIsDeletingFolder(true);
+      if (onDeleteFolder) {
+        await onDeleteFolder(deleteConfirmGroup.id);
+        setSelectedId(null);
+      }
+      setDeleteConfirmGroup(null);
+    } catch (e) {
+      console.error('[Customer Delete Error]:', e);
+    } finally {
+      setIsDeletingFolder(false);
     }
   }
 
@@ -112,14 +131,19 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
       {/* Stats Bar */}
       <div className="customers-stats-bar">
         {[
-          { label: 'Total Customers', value: customers.length, color: '#4F46E5', bg: '#EEF2FF' },
-          { label: 'Active Today', value: customers.filter((c) => Date.now() - c.lastActivity < 86400000).length, color: '#059669', bg: '#ECFDF5' },
-          { label: 'Total Files', value: files.length, color: '#D97706', bg: '#FFFBEB' },
-          { label: 'Text Notes', value: texts.length, color: '#7C3AED', bg: '#F5F3FF' },
+          { icon: '👥', label: 'Total Customers', value: customers.length, color: '#4F46E5', bg: '#EEF2FF', border: '#C7D2FE' },
+          { icon: '🟢', label: 'Active Today', value: customers.filter((c) => Date.now() - c.lastActivity < 86400000).length, color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },
+          { icon: '📁', label: 'Total Files', value: files.length, color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
+          { icon: '💬', label: 'Text Notes', value: texts.length, color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
         ].map((s) => (
           <div key={s.label} className="cust-stat-card">
-            <div className="cust-stat-val" style={{ color: s.color }}>{s.value}</div>
-            <div className="cust-stat-lbl">{s.label}</div>
+            <div className="cust-stat-icon-wrap" style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
+              <span style={{ fontSize: '1.35rem' }}>{s.icon}</span>
+            </div>
+            <div className="cust-stat-info">
+              <div className="cust-stat-val" style={{ color: s.color }}>{s.value}</div>
+              <div className="cust-stat-lbl">{s.label}</div>
+            </div>
           </div>
         ))}
       </div>
@@ -186,8 +210,20 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
                   <div className="detail-avatar">{selected.name.charAt(0).toUpperCase()}</div>
                   <div style={{ flex: 1 }}>
                     <div className="flex items-center justify-between">
-                      <h3 className="detail-name">{selected.name}</h3>
-                      <button className="btn btn-ghost btn-xs" style={{ color: '#EF4444' }} onClick={handleDeleteCustomer}>
+                      <div className="flex items-center gap-2">
+                        <h3 className="detail-name">{selected.name}</h3>
+                        <button
+                          className="btn btn-ghost btn-xs text-xs"
+                          onClick={() => {
+                            setEditingNick(!editingNick);
+                            setNicknameInput(selected.name || '');
+                          }}
+                          title="Rename / Set Customer Nickname"
+                        >
+                          ✏️ Rename
+                        </button>
+                      </div>
+                      <button className="btn btn-ghost btn-xs" style={{ color: '#EF4444' }} onClick={() => setDeleteConfirmGroup(selected)}>
                         🗑️ Delete Customer
                       </button>
                     </div>
@@ -198,39 +234,48 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
                   </div>
                 </div>
 
-                {/* Nickname Editor Box */}
-                <div className="nickname-box">
-                  <label className="form-label">🏷️ Set Customer Nickname (Persists in DB)</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      className="input input-sm"
-                      placeholder="e.g. Ramesh Bhai / Token #4"
-                      value={nicknameInput}
-                      onChange={(e) => setNicknameInput(e.target.value)}
-                    />
-                    <button className="btn btn-primary btn-sm" onClick={handleSaveNickname} disabled={savingNick}>
-                      {savingNick ? 'Saving...' : '💾 Save'}
-                    </button>
+                {/* Nickname Editor Box (Only shown when editing requested) */}
+                {editingNick && (
+                  <div className="nickname-box">
+                    <label className="form-label">🏷️ Custom Folder Name / Nickname</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        className="input input-sm flex-1"
+                        placeholder="e.g. Ramesh Bhai / Token #4"
+                        value={nicknameInput}
+                        onChange={(e) => setNicknameInput(e.target.value)}
+                        autoFocus
+                      />
+                      <button className="btn btn-primary btn-sm" onClick={handleSaveNickname} disabled={savingNick}>
+                        {savingNick ? 'Saving...' : '💾 Save'}
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEditingNick(false)}>
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                  {savedSuccess && (
-                    <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, marginTop: '4px', display: 'block' }}>
-                      ✅ Nickname updated persistently across all files!
-                    </span>
-                  )}
-                </div>
+                )}
+
+                {savedSuccess && (
+                  <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, margin: '6px 0', display: 'block' }}>
+                    ✅ Nickname updated persistently across all files!
+                  </span>
+                )}
 
                 {/* Detail Stats */}
                 <div className="detail-stats-row mt-4">
                   {[
-                    { label: 'Total Files', value: selected.files.length, color: '#4F46E5' },
-                    { label: 'Pending Print', value: selected.files.filter((f) => !f.printedStatus).length, color: '#D97706' },
-                    { label: 'Storage Used', value: formatBytes(totalStorage), color: '#059669' },
-                    { label: 'Text Notes', value: selected.texts.length, color: '#7C3AED' },
+                    { icon: '📁', label: 'Total Files', value: selected.files.length, color: '#4F46E5' },
+                    { icon: '⏳', label: 'Pending Print', value: selected.files.filter((f) => !f.printedStatus).length, color: '#D97706' },
+                    { icon: '💾', label: 'Storage Used', value: formatBytes(totalStorage), color: '#059669' },
+                    { icon: '💬', label: 'Text Notes', value: selected.texts.length, color: '#7C3AED' },
                   ].map((s) => (
                     <div key={s.label} className="detail-stat">
                       <div style={{ fontSize: '1.2rem', fontWeight: 900, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>{s.label}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                        <span>{s.icon}</span> {s.label}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -244,23 +289,28 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
                     <div className="detail-file-list">
                       {selected.files.slice(0, 5).map((f, i) => (
                         <div key={i} className="detail-file-row">
-                          <span style={{ fontSize: '1.1rem' }}>
+                          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>
                             {f.mimeType?.startsWith('image/') ? '🖼️' : f.mimeType?.includes('pdf') ? '📕' : '📄'}
                           </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.originalName}>
                               {f.originalName}
                             </div>
                             <div style={{ fontSize: '0.7rem', color: '#94A3B8' }}>{formatBytes(f.size)} · {timeAgo(f.savedAt)}</div>
                           </div>
-                          <span className={`status-pill ${f.printedStatus ? 'printed' : 'pending'}`}>
-                            {f.printedStatus ? '✓ Printed' : '⏳ Pending'}
-                          </span>
-                          {f.cloudinarySecureUrl && (
-                            <a href={f.cloudinarySecureUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs">
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className={`status-pill ${f.printedStatus ? 'printed' : 'pending'}`}>
+                              {f.printedStatus ? '✓ Printed' : '⏳ Pending'}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs detail-preview-btn"
+                              title="Preview file"
+                              onClick={() => setPreviewFile(f)}
+                            >
                               👁️
-                            </a>
-                          )}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -269,10 +319,14 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
 
                 {/* Action Buttons */}
                 <div className="detail-actions">
-                  <button className="btn btn-primary btn-sm" onClick={() => onNavChange('qr_management')}>
-                    📱 Generate Temp QR
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setQrCustomer(selected)}
+                    title="Generate direct upload QR for this customer folder"
+                  >
+                    📱 Generate Folder QR
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => onNavChange('customer_folders')}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => onNavChange('customer_folders', selected.id || selected.name)}>
                     📂 Open Customer Folder
                   </button>
                   <button className="btn btn-secondary btn-sm" onClick={() => onNavChange('billing')}>
@@ -291,12 +345,45 @@ export function CustomersPage({ files, texts, onNavChange, onDeleteFolder }) {
         </div>
       </div>
 
+      {/* Permanent Delete Confirmation Modal with Never Restore Warning */}
+      {deleteConfirmGroup && (
+        <ConfirmDeleteFolderModal
+          group={deleteConfirmGroup}
+          onConfirm={handleConfirmPermanentDelete}
+          onCancel={() => setDeleteConfirmGroup(null)}
+          isDeleting={isDeletingFolder}
+        />
+      )}
+
+      {/* In-App File Preview Modal */}
+      {previewFile && (
+        <FilePreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
+
+      {/* Direct Customer Folder Upload QR Modal */}
+      {qrCustomer && (
+        <QRModal
+          isOpen={Boolean(qrCustomer)}
+          onClose={() => setQrCustomer(null)}
+          customerId={qrCustomer.id}
+          customerName={qrCustomer.name}
+          deviceName={qrCustomer.deviceName}
+          shopId={shop?.shopId || 'default'}
+          shopName={shop?.shopName || 'WiFi Drop'}
+        />
+      )}
+
       <style>{`
         .customers-page { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; }
         .customers-stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-        .cust-stat-card { background: white; border: 1px solid #E2E8F0; border-radius: 14px; padding: 1.1rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-        .cust-stat-val { font-size: 1.8rem; font-weight: 900; line-height: 1; }
-        .cust-stat-lbl { font-size: 0.78rem; color: #64748B; font-weight: 600; margin-top: 4px; }
+        .cust-stat-card { background: white; border: 1px solid #E2E8F0; border-radius: 16px; padding: 1.1rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 14px; }
+        .cust-stat-icon-wrap { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .cust-stat-info { display: flex; flex-direction: column; min-width: 0; }
+        .cust-stat-val { font-size: 1.65rem; font-weight: 900; line-height: 1.1; }
+        .cust-stat-lbl { font-size: 0.78rem; color: #64748B; font-weight: 600; margin-top: 2px; }
         .customers-layout { display: grid; grid-template-columns: 340px 1fr; gap: 1rem; min-height: 500px; }
         .customers-list-panel, .customer-detail-panel { background: white; border: 1px solid #E2E8F0; border-radius: 18px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
         .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #F1F5F9; }
