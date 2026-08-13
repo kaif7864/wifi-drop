@@ -296,33 +296,6 @@ export function MobileView() {
     // Do NOT clear input.value here — mobile browsers revoke File refs (especially 5MB+ PDFs)
   };
 
-  const openDocPicker = () => {
-    setUploadErrorMsg('');
-    const input = docInputRef.current;
-    if (input) {
-      input.value = '';
-      input.click();
-    }
-  };
-
-  const openGalleryPicker = () => {
-    setUploadErrorMsg('');
-    const input = galleryInputRef.current;
-    if (input) {
-      input.value = '';
-      input.click();
-    }
-  };
-
-  const openCameraPicker = () => {
-    setUploadErrorMsg('');
-    const input = cameraInputRef.current;
-    if (input) {
-      input.value = '';
-      input.click();
-    }
-  };
-
   const removeSelectedFile = (indexToRemove) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== indexToRemove));
     setFileNotes((prev) => {
@@ -688,27 +661,39 @@ export function MobileView() {
 
                   {/* Pick buttons */}
                   <div className="pick-buttons">
-                    <button type="button" className="pick-card pick-card-gallery" onClick={openGalleryPicker}>
+                    <label
+                      htmlFor="gallery-picker"
+                      className="pick-card pick-card-gallery"
+                      onClick={() => { if (galleryInputRef.current) galleryInputRef.current.value = ''; }}
+                    >
                       <div className="pick-icon-box">
                         <span className="pick-icon">🖼️</span>
                       </div>
                       <span className="pick-label">Photos & Gallery</span>
                       <span className="pick-sub">Phone photos</span>
-                    </button>
-                    <button type="button" className="pick-card pick-card-docs" onClick={openDocPicker}>
+                    </label>
+                    <label
+                      htmlFor="doc-picker"
+                      className="pick-card pick-card-docs"
+                      onClick={() => { if (docInputRef.current) docInputRef.current.value = ''; }}
+                    >
                       <div className="pick-icon-box">
                         <span className="pick-icon">📄</span>
                       </div>
                       <span className="pick-label">PDFs & Docs</span>
                       <span className="pick-sub">Documents</span>
-                    </button>
-                    <button type="button" className="pick-card pick-card-camera" onClick={openCameraPicker}>
+                    </label>
+                    <label
+                      htmlFor="camera-picker"
+                      className="pick-card pick-card-camera"
+                      onClick={() => { if (cameraInputRef.current) cameraInputRef.current.value = ''; }}
+                    >
                       <div className="pick-icon-box">
                         <span className="pick-icon">📷</span>
                       </div>
                       <span className="pick-label">Camera</span>
                       <span className="pick-sub">Live photo</span>
-                    </button>
+                    </label>
                     <button
                       type="button"
                       className="pick-card pick-card-scan"
@@ -1510,13 +1495,6 @@ export function MobileView() {
           box-sizing: border-box;
           text-decoration: none;
           position: relative;
-          appearance: none;
-          -webkit-appearance: none;
-        }
-
-        button.pick-card {
-          border: none;
-          background: none;
         }
 
         .pick-card:hover, .pick-card:active {
