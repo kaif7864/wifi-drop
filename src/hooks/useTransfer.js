@@ -394,17 +394,18 @@ export function useTransfer(shopId = null) {
   }, []);
 
   // ── Create a new shop folder ───────────────────────────────────────────────
-  const createShopFolder = useCallback(async ({ folderName, description = '' }) => {
+  const createShopFolder = useCallback(async ({ folderName, description = '', category, type, customerId }) => {
     const token = localStorage.getItem('wifidrop_token');
     if (!token) throw new Error('Not authenticated');
     try {
       const response = await axios.post(
         `${BASE_URL}/api/folders`,
-        { folderName, description, shopId },
+        { folderName, description, category, type, customerId, shopId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (response.data.success) {
+      if (response.data.success && response.data.folder) {
         setShopFolders((prev) => [response.data.folder, ...prev]);
+        return response.data.folder;
       }
       return response.data;
     } catch (err) {
@@ -413,6 +414,7 @@ export function useTransfer(shopId = null) {
       throw err;
     }
   }, [shopId]);
+
 
   // ── Fetch shop owner's custom folders ─────────────────────────────────────
   const fetchShopFolders = useCallback(async () => {

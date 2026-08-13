@@ -273,9 +273,18 @@ export function CustomerFolders({
     return customerGroups.find((g) => g.customerId === selectedCustomerId) || null;
   }, [customerGroups, selectedCustomerId]);
 
+  const myShopFolders = useMemo(() => {
+    return (shopFolders || []).filter((f) => f.type !== 'customer' && f.category !== 'customer');
+  }, [shopFolders]);
+
+  const customCustomerFolders = useMemo(() => {
+    return (shopFolders || []).filter((f) => f.type === 'customer' || f.category === 'customer');
+  }, [shopFolders]);
+
   const unprintedFoldersCount = useMemo(() => {
     return customerGroups.filter((g) => g.unprintedCount > 0).length;
   }, [customerGroups]);
+
 
   const handleCreateFolder = async (e) => {
     e.preventDefault();
@@ -286,7 +295,14 @@ export function CustomerFolders({
     setIsCreatingFolder(true);
     setCreateFolderError('');
     try {
-      await onCreateShopFolder({ folderName: newFolderName.trim(), description: newFolderDesc.trim() });
+      const category = (mainTab === 'customer' || selectedCustomerId) ? 'customer' : 'shop';
+      await onCreateShopFolder({
+        folderName: newFolderName.trim(),
+        description: newFolderDesc.trim(),
+        category,
+        type: category === 'customer' ? 'customer' : 'system',
+        customerId: selectedCustomerId || null,
+      });
       setShowCreateFolderModal(false);
       setNewFolderName('');
       setNewFolderDesc('');
@@ -296,6 +312,7 @@ export function CustomerFolders({
       setIsCreatingFolder(false);
     }
   };
+
 
   const handleUploadToFolder = async (e, folder) => {
     const fileList = e.target.files;
@@ -738,7 +755,7 @@ export function CustomerFolders({
             <>
               <div className="folder-controls-bar flex items-center justify-between mb-4 gap-3">
                 <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  🗂️ {shopFolders.length} folder{shopFolders.length !== 1 ? 's' : ''}
+                  🗂️ {myShopFolders.length} folder{myShopFolders.length !== 1 ? 's' : ''}
                 </span>
                 {onCreateShopFolder && (
                   <button
@@ -750,7 +767,8 @@ export function CustomerFolders({
                 )}
               </div>
 
-              {shopFolders.length === 0 ? (
+              {myShopFolders.length === 0 ? (
+
                 <div className="create-folder-cta">
                   <span style={{ fontSize: '2.5rem' }}>🗂️</span>
                   <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', margin: '10px 0 4px' }}>
@@ -766,7 +784,8 @@ export function CustomerFolders({
                 </div>
               ) : (
                 <div className="folders-grid">
-                  {shopFolders.map((folder) => {
+                  {myShopFolders.map((folder) => {
+
                     const folderFiles = files.filter(f => f.folderId === folder.folderId);
                     return (
                       <motion.div
@@ -896,18 +915,69 @@ export function CustomerFolders({
 
 
               <div className="folders-grid">
-                {filteredCustomerGroups.length === 0 ? (
+                {filteredCustomerGroups.length === 0 && customCustomerFolders.length === 0 ? (
                   <div className="empty-state">
                     <span className="empty-state-icon">📂</span>
                     <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>No Customer Folders Found</p>
                     <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                       {searchQuery || folderFilter !== 'all'
                         ? 'No folders match your current filter or search query.'
-                        : 'Scan the QR code on mobile and upload files to create customer folders automatically.'}
+                        : 'Scan the QR code on mobile or click "➕ New Folder" to create customer folders.'}
                     </p>
                   </div>
                 ) : (
-                  filteredCustomerGroups.map((group) => {
+                  <>
+                    {customCustomerFolders.map((folder) => {
+                      const folderFiles = files.filter((f) => f.folderId === folder.folderId);
+                      return (
+                        <motion.div
+                          key={folder.folderId}
+                          className="folder-card shop-folder-card glass-card"
+                          onClick={() => setSelectedShopFolder(folder)}
+                          whileHover={{ y: -3, transition: { duration: 0.15 } }}
+                        >
+                          <div className="folder-icon-wrapper">
+                            <span className="folder-icon">📁</span>
+                            <div className="flex items-center gap-2">
+                              <span className="shop-folder-badge-tag" style={{ background: '#EEF2FF', color: '#4F46E5', borderColor: '#C7D2FE' }}>
+                                Custom Folder
+                              </span>
+                              <button
+                                className="btn-icon btn-secondary-icon"
+                                title="Rename this folder"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingShopFolder(folder);
+                                  setRenameShopFolderName(folder.folderName || '');
+                                  setRenameShopFolderDesc(folder.description || '');
+                                  setRenameShopFolderError('');
+                                }}
+                              >
+                                ✏️
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="folder-info">
+                            <h3 className="folder-name">{folder.folderName}</h3>
+                            {folder.description && (
+                              <p className="folder-desc">{folder.description}</p>
+                            )}
+                            <p className="folder-meta">
+                              {folderFiles.length} Files
+                              {folderFiles.length > 0 ? ` · ${formatBytes(folderFiles.reduce((a, f) => a + (f.size || 0), 0))}` : ''}
+                            </p>
+                          </div>
+
+                          <button className="btn btn-ghost btn-xs folder-open-btn">
+                            Open Folder ↗
+                          </button>
+                        </motion.div>
+                      );
+                    })}
+
+                    {filteredCustomerGroups.map((group) => {
+
                     const totalSize = group.files.reduce((acc, f) => acc + (f.size || 0), 0);
                     const timeStr = new Date(group.lastActivity).toLocaleTimeString([], {
                       hour: '2-digit',
@@ -1004,8 +1074,11 @@ export function CustomerFolders({
                         </button>
                       </motion.div>
                     );
-                  })
+                  })}
+                  </>
                 )}
+
+
               </div>
             </>
           )}

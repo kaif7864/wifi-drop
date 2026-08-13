@@ -52,9 +52,9 @@ export function FolderPicker({
     return Object.values(groups);
   }, [customerGroups, files]);
 
-  // Standardize customer list
+  // Standardize customer list (physical customer groups + customer-type custom folders)
   const customerFoldersList = useMemo(() => {
-    return (computedCustomerGroups || []).map((c) => {
+    const list = (computedCustomerGroups || []).map((c) => {
       const displayName = c.nickname || c.customerName || c.deviceName || c.customerId;
       return {
         id: c.customerId,
@@ -65,21 +65,39 @@ export function FolderPicker({
         raw: c,
       };
     });
-  }, [computedCustomerGroups]);
 
-  // Standardize shop folder list
+    const customCustFolders = (shopFolders || [])
+      .filter((f) => f.type === 'customer' || f.category === 'customer')
+      .map((f) => {
+        const count = (files || []).filter((item) => item.folderId === f.folderId).length;
+        return {
+          id: f.folderId,
+          type: 'customer',
+          name: f.folderName,
+          sub: `Custom Customer Folder · ${count} files · ID: ${f.folderId}`,
+          icon: '👤',
+          raw: f,
+        };
+      });
+
+    return [...list, ...customCustFolders];
+  }, [computedCustomerGroups, shopFolders, files]);
+
+  // Standardize shop folder list (Only show Shop-type folders in Shop tab)
   const shopFoldersList = useMemo(() => {
-    return (shopFolders || []).map((f) => {
-      const count = (files || []).filter((item) => item.folderId === f.folderId).length;
-      return {
-        id: f.folderId,
-        type: 'shop',
-        name: f.folderName,
-        sub: `Shop Folder · ${count} files · ID: ${f.folderId}`,
-        icon: '🗂️',
-        raw: f,
-      };
-    });
+    return (shopFolders || [])
+      .filter((f) => f.type !== 'customer' && f.category !== 'customer')
+      .map((f) => {
+        const count = (files || []).filter((item) => item.folderId === f.folderId).length;
+        return {
+          id: f.folderId,
+          type: 'shop',
+          name: f.folderName,
+          sub: `Shop Folder · ${count} files · ID: ${f.folderId}`,
+          icon: '🗂️',
+          raw: f,
+        };
+      });
   }, [shopFolders, files]);
 
   // Combine all destinations
@@ -113,9 +131,12 @@ export function FolderPicker({
     setInlineError('');
     try {
       if (onCreateFolder) {
+        const targetCategory = filterType === 'customer' ? 'customer' : 'shop';
         const created = await onCreateFolder({
           folderName: inlineFolderName.trim(),
           description: inlineFolderDesc.trim(),
+          category: targetCategory,
+          type: targetCategory === 'customer' ? 'customer' : 'system',
         });
         if (created && created.folderId) {
           onSelectFolder(created.folderId);
@@ -177,7 +198,7 @@ export function FolderPicker({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#3730A3' }}>
-              ✨ Move Ke Liye Naya Folder Banao
+              ✨ {filterType === 'customer' ? '👤 Customer' : '🗂️ Shop'} Ke Liye Naya Folder Banao
             </span>
             <button
               type="button"
