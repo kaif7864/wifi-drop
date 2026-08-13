@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { config } from '../config';
 
 const ICE_SERVERS = {
   iceServers: [

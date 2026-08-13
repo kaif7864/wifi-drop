@@ -22,6 +22,24 @@ const DocumentScanner = lazy(() =>
 
 const DEVICE_NAME_KEY = 'wifidrop_device_name';
 
+function formatSelectedFileSize(bytes) {
+  if (!bytes || bytes <= 0) return '—';
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+/** Detach File from input so mobile browsers don't revoke it when input is reset */
+function persistPickedFile(file) {
+  if (!file) return null;
+  try {
+    const type = file.type
+      || (file.name?.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+    const blob = file.slice(0, file.size, type);
+    return new File([blob], file.name, { type, lastModified: file.lastModified || Date.now() });
+  } catch {
+    return file;
+  }
+}
 function getSavedDeviceName() {
   try {
     return localStorage.getItem(DEVICE_NAME_KEY) || 'Mobile Device';
@@ -252,15 +270,57 @@ export function MobileView() {
   }, [connected, sessionId, initiateConnect]);
 
   const handleFileChange = (e) => {
-    const newFiles = Array.from(e.target.files || []);
-    if (newFiles.length > 0) {
-      setSelectedFiles((prev) => {
-        const existingKeys = new Set(prev.map((f) => `${f.name}_${f.size}`));
-        const filtered = newFiles.filter((f) => !existingKeys.has(`${f.name}_${f.size}`));
-        return [...prev, ...filtered];
-      });
+    const input = e.target;
+    const rawFiles = Array.from(input.files || []);
+    if (rawFiles.length === 0) return;
+
+    const newFiles = rawFiles.map(persistPickedFile).filter(Boolean);
+    if (newFiles.length === 0) {
+      setUploadErrorMsg('Could not read selected file. Please try again.');
+      return;
     }
-    e.target.value = '';
+
+    setUploadErrorMsg('');
+    const existingKeys = new Set(selectedFiles.map((f) => `${f.name}_${f.size}`));
+    const filtered = newFiles.filter((f) => f.size > 0 && !existingKeys.has(`${f.name}_${f.size}`));
+
+    if (filtered.length === 0) {
+      setUploadErrorMsg(newFiles.some((f) => f.size <= 0)
+        ? 'Could not read file size. Try selecting from Downloads or Files app.'
+        : 'This file is already in the queue.');
+      return;
+    }
+
+    setSelectedFiles((prev) => [...prev, ...filtered]);
+
+    // Do NOT clear input.value here — mobile browsers revoke File refs (especially 5MB+ PDFs)
+  };
+
+  const openDocPicker = () => {
+    setUploadErrorMsg('');
+    const input = docInputRef.current;
+    if (input) {
+      input.value = '';
+      input.click();
+    }
+  };
+
+  const openGalleryPicker = () => {
+    setUploadErrorMsg('');
+    const input = galleryInputRef.current;
+    if (input) {
+      input.value = '';
+      input.click();
+    }
+  };
+
+  const openCameraPicker = () => {
+    setUploadErrorMsg('');
+    const input = cameraInputRef.current;
+    if (input) {
+      input.value = '';
+      input.click();
+    }
   };
 
   const removeSelectedFile = (indexToRemove) => {
@@ -610,9 +670,10 @@ export function MobileView() {
                     ref={docInputRef}
                     type="file"
                     multiple
-                    accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/zip,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    accept=".pdf,application/pdf,application/x-pdf,application/octet-stream,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                     style={{ display: 'none' }}
                     onChange={handleFileChange}
+                    onInput={handleFileChange}
                     id="doc-picker"
                   />
                   <input
@@ -627,27 +688,27 @@ export function MobileView() {
 
                   {/* Pick buttons */}
                   <div className="pick-buttons">
-                    <label htmlFor="gallery-picker" className="pick-card pick-card-gallery">
+                    <button type="button" className="pick-card pick-card-gallery" onClick={openGalleryPicker}>
                       <div className="pick-icon-box">
                         <span className="pick-icon">🖼️</span>
                       </div>
                       <span className="pick-label">Photos & Gallery</span>
                       <span className="pick-sub">Phone photos</span>
-                    </label>
-                    <label htmlFor="doc-picker" className="pick-card pick-card-docs">
+                    </button>
+                    <button type="button" className="pick-card pick-card-docs" onClick={openDocPicker}>
                       <div className="pick-icon-box">
                         <span className="pick-icon">📄</span>
                       </div>
                       <span className="pick-label">PDFs & Docs</span>
                       <span className="pick-sub">Documents</span>
-                    </label>
-                    <label htmlFor="camera-picker" className="pick-card pick-card-camera">
+                    </button>
+                    <button type="button" className="pick-card pick-card-camera" onClick={openCameraPicker}>
                       <div className="pick-icon-box">
                         <span className="pick-icon">📷</span>
                       </div>
                       <span className="pick-label">Camera</span>
                       <span className="pick-sub">Live photo</span>
-                    </label>
+                    </button>
                     <button
                       type="button"
                       className="pick-card pick-card-scan"
@@ -718,7 +779,7 @@ export function MobileView() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                             <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
-                              {(f.size / 1024).toFixed(1)} KB
+                              {formatSelectedFileSize(f.size)}
                             </span>
                             <button
                               className="btn-remove-selected"
@@ -1045,7 +1106,7 @@ export function MobileView() {
                             <button
                               type="button"
                               className="view-card-btn btn-view"
-                              onClick={() => setPreviewModal({ url: previewUrl, name: f.originalName, isPdf, isImg })}
+                              onClick={() => setPreviewModal({ url: previewUrl, name: f.originalName, isPdf, isImg, fileSize: f.size })}
                             >
                               👁️ View Preview
                             </button>
@@ -1114,7 +1175,7 @@ export function MobileView() {
                   style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }}
                 />
               ) : previewModal.isPdf ? (
-                <PdfCanvasViewer url={previewModal.url} name={previewModal.name} />
+                <PdfCanvasViewer url={previewModal.url} name={previewModal.name} fileSize={previewModal.fileSize || 0} />
               ) : (
                 <div style={{ textAlign: 'center', color: '#64748B', padding: '2rem' }}>
                   <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
@@ -1449,6 +1510,13 @@ export function MobileView() {
           box-sizing: border-box;
           text-decoration: none;
           position: relative;
+          appearance: none;
+          -webkit-appearance: none;
+        }
+
+        button.pick-card {
+          border: none;
+          background: none;
         }
 
         .pick-card:hover, .pick-card:active {

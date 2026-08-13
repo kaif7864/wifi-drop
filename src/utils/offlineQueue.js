@@ -74,3 +74,18 @@ export async function clearStagedItem(id) {
     return false;
   }
 }
+
+export async function stageFilesInQueue(files, meta, fileNotes = {}) {
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    await stageUploadInQueue({
+      type: 'file',
+      file: f,
+      fileName: f.name,
+      fileSize: f.size,
+      fileType: f.type,
+      note: fileNotes[i] || '',
+      ...meta,
+    });
+  }
+}

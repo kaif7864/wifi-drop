@@ -6,9 +6,32 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { config } from '../config';
+import { shouldUseChunkedUpload, uploadSingleFileChunked } from '../utils/chunkedUpload';
 
-const BASE_URL = config.serverUrl;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+const getBaseUrl = () => config.serverUrl;
+
+function isRetryableUploadError(err) {
+  if (!err) return false;
+  if (err.response?.status === 413) return false;
+  const code = err.code || '';
+  const msg = (err.message || '').toLowerCase();
+  return !err.response || code === 'ERR_NETWORK' || code === 'ECONNABORTED' || msg.includes('network error');
+}
+
+async function postUploadWithRetry(url, formData, options, maxRetries = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await axios.post(url, formData, options);
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryableUploadError(err) || attempt === maxRetries) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw lastErr;
+}
 
 export function useTransfer(shopId = null) {
   const isShopOwner = !!(
@@ -143,29 +166,88 @@ export function useTransfer(shopId = null) {
     setUploadProgress(0);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('shopId', shopId || 'default');
-    if (sessionId) formData.append('sessionId', sessionId);
-    formData.append('deviceName', deviceName);
-    if (customerId) formData.append('customerId', customerId);
-    if (customerName) formData.append('customerName', customerName);
-    if (deviceId) formData.append('deviceId', deviceId);
-    if (fileNotes && Object.keys(fileNotes).length > 0) {
-      formData.append('fileNotes', JSON.stringify(fileNotes));
-    }
-    Array.from(fileList).forEach((file) => formData.append('files', file));
+    const files = Array.from(fileList);
+    const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
+    const hasPdf = files.some(
+      (f) => f.type?.includes('pdf') || f.name?.toLowerCase().endsWith('.pdf')
+    );
+    const uploadTimeout = hasPdf
+      ? 600000
+      : totalSize > 1024 * 1024
+        ? Math.min(600000, Math.max(120000, 120000 + Math.round(totalSize / 1024)))
+        : 120000;
+
+    const meta = {
+      shopId: shopId || 'default',
+      sessionId,
+      deviceName,
+      customerId,
+      customerName,
+      deviceId,
+    };
 
     try {
-      const response = await axios.post(`${BASE_URL}/api/upload`, formData, {
-        timeout: 90000, // 90s — handles Render cold start wakeup time
-        onUploadProgress: (progressEvent) => {
-          const percent = Math.round(
-            (progressEvent.loaded * 100) / (progressEvent.total || 1)
-          );
-          setUploadProgress(percent);
-        },
-      });
-      return response.data;
+      const allResults = [];
+      let customer = null;
+
+      // Large files (>10MB): chunked upload with per-chunk retry
+      for (let i = 0; i < files.length; i++) {
+        if (!shouldUseChunkedUpload(files[i])) continue;
+        const note = fileNotes[i] || fileNotes[files[i].name] || '';
+        const data = await uploadSingleFileChunked(
+          files[i],
+          { ...meta, note },
+          (pct) => setUploadProgress(pct)
+        );
+        if (data?.files) allResults.push(...data.files);
+        if (data?.customer) customer = data.customer;
+      }
+
+      // Small/medium files: single multipart request (batched)
+      const batch = files.filter((f) => !shouldUseChunkedUpload(f));
+      if (batch.length > 0) {
+        const formData = new FormData();
+        formData.append('shopId', meta.shopId);
+        if (sessionId) formData.append('sessionId', sessionId);
+        formData.append('deviceName', deviceName);
+        if (customerId) formData.append('customerId', customerId);
+        if (customerName) formData.append('customerName', customerName);
+        if (deviceId) formData.append('deviceId', deviceId);
+
+        const notesPayload = {};
+        batch.forEach((file) => {
+          const origIdx = files.indexOf(file);
+          const note = fileNotes[origIdx] || fileNotes[file.name] || '';
+          if (note) notesPayload[file.name] = note;
+        });
+        if (Object.keys(notesPayload).length > 0) {
+          formData.append('fileNotes', JSON.stringify(notesPayload));
+        }
+        batch.forEach((file) => formData.append('files', file));
+
+        const response = await postUploadWithRetry(
+          `${getBaseUrl()}/api/upload`,
+          formData,
+          {
+            timeout: uploadTimeout,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+            onUploadProgress: (progressEvent) => {
+              const percent = Math.round(
+                (progressEvent.loaded * 100) / (progressEvent.total || 1)
+              );
+              setUploadProgress(percent);
+            },
+          },
+          3
+        );
+
+        if (response.data?.files) allResults.push(...response.data.files);
+        if (response.data?.customer) customer = response.data.customer;
+      }
+
+      setUploadProgress(100);
+      return { success: true, files: allResults, customer };
     } catch (err) {
       const message = err.response?.data?.error || err.message;
       setError(message);
@@ -179,7 +261,7 @@ export function useTransfer(shopId = null) {
   const sendText = useCallback(async (text, deviceName, sessionId = null, shopId = 'default', customerId = null, customerName = null, deviceId = null) => {
     setError(null);
     try {
-      const response = await axios.post(`${BASE_URL}/api/text`, {
+      const response = await axios.post(`${getBaseUrl()}/api/text`, {
         text,
         deviceName,
         sessionId,
@@ -202,7 +284,7 @@ export function useTransfer(shopId = null) {
     if (!targetId) return;
 
     try {
-      await axios.delete(`${BASE_URL}/api/files/${targetId}`);
+      await axios.delete(`${getBaseUrl()}/api/files/${targetId}`);
       setFiles((prev) => prev.filter((f) => f.id !== targetId && f.uuid !== targetId && f._id !== targetId));
     } catch (err) {
       setError(err.response?.data?.error || err.message);
@@ -215,7 +297,7 @@ export function useTransfer(shopId = null) {
     if (!targetId) return;
 
     try {
-      await axios.delete(`${BASE_URL}/api/text/${targetId}`);
+      await axios.delete(`${getBaseUrl()}/api/text/${targetId}`);
       setTexts((prev) => prev.filter((t) => t.id !== targetId && t.uuid !== targetId && t._id !== targetId));
     } catch (err) {
       setError(err.response?.data?.error || err.message);
@@ -235,8 +317,8 @@ export function useTransfer(shopId = null) {
       if (resolvedToken) headers['Authorization'] = `Bearer ${resolvedToken}`;
 
       const [fileRes, textRes] = await Promise.all([
-        axios.get(`${BASE_URL}/api/files`, { params, headers }),
-        axios.get(`${BASE_URL}/api/text`, { params, headers }),
+        axios.get(`${getBaseUrl()}/api/files`, { params, headers }),
+        axios.get(`${getBaseUrl()}/api/text`, { params, headers }),
       ]);
 
       const fetchedFiles = Array.isArray(fileRes.data.files) ? fileRes.data.files : [];
@@ -270,7 +352,7 @@ export function useTransfer(shopId = null) {
     );
 
     try {
-      await axios.patch(`${BASE_URL}/api/files/${targetId}/print`);
+      await axios.patch(`${getBaseUrl()}/api/files/${targetId}/print`);
     } catch (err) {
       console.warn('[Print Status Toggle Error]:', err.message);
     }
@@ -280,7 +362,7 @@ export function useTransfer(shopId = null) {
   const deleteCustomerFolder = useCallback(async (customerId) => {
     if (!customerId) return;
     try {
-      await axios.delete(`${BASE_URL}/api/files/customer/${encodeURIComponent(customerId)}`);
+      await axios.delete(`${getBaseUrl()}/api/files/customer/${encodeURIComponent(customerId)}`);
       const isName = customerId.startsWith('name_');
       const rawName = isName ? customerId.replace('name_', '').toLowerCase() : null;
       const matchHash = customerId.match(/(?:cust_|#)?([A-Z0-9]{6})/i);

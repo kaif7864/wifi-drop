@@ -3,7 +3,18 @@
  */
 
 const MAX_PAGES = 20;
-const JPEG_QUALITY = 0.88;
+const JPEG_QUALITY = 0.82;
+const PDF_MAX_EDGE = 1200; // keep scanned PDFs smaller for mobile upload
+
+function limitEdge(width, height, maxEdge) {
+  const longest = Math.max(width, height);
+  if (longest <= maxEdge) return { width, height };
+  const scale = maxEdge / longest;
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale),
+  };
+}
 
 /**
  * @param {{ dataUrl: string, width: number, height: number }[]} pages
@@ -23,20 +34,21 @@ export async function buildScanPdfFile(pages) {
 
   for (let i = 0; i < pages.length; i++) {
     const { dataUrl, width, height } = pages[i];
-    const orientation = width >= height ? 'landscape' : 'portrait';
+    const sized = limitEdge(width, height, PDF_MAX_EDGE);
+    const orientation = sized.width >= sized.height ? 'landscape' : 'portrait';
 
     if (i === 0) {
       pdf = new jsPDF({
         orientation,
         unit: 'px',
-        format: [width, height],
+        format: [sized.width, sized.height],
         compress: true,
       });
     } else {
-      pdf.addPage([width, height], orientation);
+      pdf.addPage([sized.width, sized.height], orientation);
     }
 
-    pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height, undefined, 'FAST');
+    pdf.addImage(dataUrl, 'JPEG', 0, 0, sized.width, sized.height, undefined, 'FAST');
   }
 
   const blob = pdf.output('blob');

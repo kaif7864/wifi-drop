@@ -10,14 +10,24 @@ function resolveServerUrl() {
   }
   if (typeof window !== 'undefined') {
     const { protocol, hostname, port, origin } = window.location;
-    // If client is served directly from backend port (e.g. port 3000)
+    // Served from Express (port 3000) or production — same origin
     if (port === '3000' || !port) {
       return origin;
     }
-    // If client is served from Vite dev server (e.g. port 5173), point to backend port 3000
-    return `${protocol}//${hostname}:3000`;
+    // Vite dev (5173): same origin so /api + /socket.io use the dev proxy
+    if (port === '5173') {
+      return origin;
+    }
+    const isLan =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.');
+    if (isLan) {
+      return `${protocol}//${hostname}:3000`;
+    }
   }
-  return 'http://localhost:3000';
+  return 'https://wifi-drop-server.onrender.com';
 }
 
 export const config = {

@@ -6,12 +6,15 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.js';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
-// Configure PDF.js worker via cdnjs matching version
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-export function PdfCanvasViewer({ url, name, note = '' }) {
+const LARGE_PDF_BYTES = 5 * 1024 * 1024;
+
+export function PdfCanvasViewer({ url, name, note = '', fileSize = 0 }) {
+  const isLargePdf = fileSize > LARGE_PDF_BYTES;
   const containerRef = useRef(null);
   const [numPages, setNumPages] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -67,10 +70,10 @@ export function PdfCanvasViewer({ url, name, note = '' }) {
   };
 
   useEffect(() => {
-    if (url) {
+    if (url && !isLargePdf) {
       loadPdf(note || '');
     }
-  }, [url]);
+  }, [url, isLargePdf]);
 
   const handleUnlockSubmit = (e) => {
     e.preventDefault();
@@ -190,6 +193,27 @@ export function PdfCanvasViewer({ url, name, note = '' }) {
   const handleOpenNative = () => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
+
+  const formatSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${Math.round(bytes / 1024)} KB`;
+  };
+
+  if (isLargePdf) {
+    return (
+      <div className="pdf-viewer-root">
+        <div style={{ padding: '12px 14px', background: '#EFF6FF', borderRadius: '12px', marginBottom: '10px', fontSize: '0.82rem', color: '#1E40AF' }}>
+          <strong>Large PDF ({formatSize(fileSize)})</strong>
+          <p style={{ margin: '6px 0 0', color: '#475569' }}>Native browser viewer works best for files over 5 MB.</p>
+          <button type="button" onClick={handleOpenNative} style={{ marginTop: '8px', fontWeight: 700, color: '#2563EB', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+            Open in browser ↗
+          </button>
+        </div>
+        <iframe title={name || 'PDF preview'} src={url} style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '12px', background: '#fff' }} />
+      </div>
+    );
+  }
 
   return (
     <div className="pdf-viewer-root">
