@@ -7,6 +7,9 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { config } from '../../config';
+import { navigate } from '../../App';
+import { toast } from '../../context/ToastContext';
+import { playNotificationSound } from '../../utils/audio';
 
 export function SettingsPage({ shop, sessionId }) {
   const [shopName, setShopName] = useState(shop?.shopName || '');
@@ -20,8 +23,8 @@ export function SettingsPage({ shop, sessionId }) {
   const [paperSize, setPaperSize] = useState('A4');
   const [colorMode, setColorMode] = useState('Auto');
   const [autoMarkPrinted, setAutoMarkPrinted] = useState(false);
-  const [notifEnabled, setNotifEnabled] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem('wifidrop_notif_enabled') !== 'false');
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('wifidrop_sound_enabled') !== 'false');
   const [theme, setTheme] = useState('light');
   const [language, setLanguage] = useState('en');
 
@@ -55,8 +58,14 @@ export function SettingsPage({ shop, sessionId }) {
         }
         if (s.language) setLanguage(s.language);
         if (s.autoMarkPrinted !== undefined) setAutoMarkPrinted(s.autoMarkPrinted);
-        if (s.notifEnabled !== undefined) setNotifEnabled(s.notifEnabled);
-        if (s.soundEnabled !== undefined) setSoundEnabled(s.soundEnabled);
+        if (s.notifEnabled !== undefined) {
+          setNotifEnabled(s.notifEnabled);
+          localStorage.setItem('wifidrop_notif_enabled', s.notifEnabled ? 'true' : 'false');
+        }
+        if (s.soundEnabled !== undefined) {
+          setSoundEnabled(s.soundEnabled);
+          localStorage.setItem('wifidrop_sound_enabled', s.soundEnabled ? 'true' : 'false');
+        }
       }
     } catch {}
   }
@@ -90,7 +99,7 @@ export function SettingsPage({ shop, sessionId }) {
       setSavedMsg('✅ All settings saved to backend successfully!');
       setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
-      alert('Failed to save settings: ' + (err.response?.data?.error || err.message));
+      toast.error('Failed to save settings: ' + (err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }
@@ -207,7 +216,18 @@ export function SettingsPage({ shop, sessionId }) {
                 <div className="toggle-setting-sub">Show alerts when new files arrive</div>
               </div>
               <label className="toggle-switch">
-                <input type="checkbox" checked={notifEnabled} onChange={(e) => setNotifEnabled(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={notifEnabled}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setNotifEnabled(val);
+                    localStorage.setItem('wifidrop_notif_enabled', val ? 'true' : 'false');
+                    if (val && 'Notification' in window && Notification.permission !== 'granted') {
+                      Notification.requestPermission();
+                    }
+                  }}
+                />
                 <span className="toggle-slider" />
               </label>
             </div>
@@ -218,7 +238,18 @@ export function SettingsPage({ shop, sessionId }) {
                 <div className="toggle-setting-sub">Play sound when file received</div>
               </div>
               <label className="toggle-switch">
-                <input type="checkbox" checked={soundEnabled} onChange={(e) => setSoundEnabled(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={soundEnabled}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setSoundEnabled(val);
+                    localStorage.setItem('wifidrop_sound_enabled', val ? 'true' : 'false');
+                    if (val) {
+                      playNotificationSound();
+                    }
+                  }}
+                />
                 <span className="toggle-slider" />
               </label>
             </div>
@@ -271,8 +302,8 @@ export function SettingsPage({ shop, sessionId }) {
                 Register your shop to unlock all features and keep your data safe.
               </p>
               <div className="flex items-center gap-2">
-                <a href="/register" className="btn btn-primary btn-sm">🏪 Register Shop</a>
-                <a href="/login" className="btn btn-secondary btn-sm">🔑 Shop Login</a>
+                <button className="btn btn-primary btn-sm" onClick={() => navigate('/register')}>🏪 Register Shop</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => navigate('/login')}>🔑 Shop Login</button>
               </div>
             </div>
           )}

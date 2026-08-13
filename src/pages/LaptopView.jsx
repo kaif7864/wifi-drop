@@ -3,11 +3,12 @@
  * Laptop / Desktop Dashboard View — Multi-Page SaaS Transfer Hub with Complete Mobile Responsiveness
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
 import { useAuth } from '../context/AuthContext';
+import { navigate } from '../App';
 import { FileCard } from '../components/FileCard';
 import { TextShare } from '../components/TextShare';
 import { TimelineHistory } from '../components/TimelineHistory';
@@ -16,6 +17,8 @@ import { CategoryFilter } from '../components/CategoryFilter';
 import { QRStandee } from '../components/QRStandee';
 import { Sidebar } from '../components/Sidebar';
 import { CustomerFolders } from '../components/CustomerFolders';
+import { FolderPicker } from '../components/FolderPicker';
+
 import { DashboardPage } from './dashboard/DashboardPage';
 import { PrintPage } from './dashboard/PrintPage';
 import { BillingPage } from './dashboard/BillingPage';
@@ -25,6 +28,8 @@ import { QRManagementPage } from './dashboard/QRManagementPage';
 import { SettingsPage } from './dashboard/SettingsPage';
 import { NotificationContainer } from '../components/Notification';
 import { config } from '../config';
+import { playNotificationSound } from '../utils/audio';
+import { sendSystemNotification, requestNotificationPermission } from '../utils/notification';
 
 const PAGE_TITLES = {
   dashboard: '📊 Dashboard Overview',
@@ -57,26 +62,141 @@ export function LaptopView() {
 
   const {
     files, texts,
+    shopFolders,
     addReceivedFile, addReceivedText,
     deleteFile, deleteText,
     deleteCustomerFolder,
     togglePrintStatus,
     fetchHistory,
+    createShopFolder,
+    fetchShopFolders,
+    uploadFilesToFolder,
+    deleteShopFolder,
+    renameShopFolder,
+    moveFile,
+    copyFile,
+    bulkMoveFiles,
+    bulkCopyFiles,
+    bulkDeleteFiles,
   } = useTransfer(shop?.shopId);
+
+
+
 
   const [toasts, setToasts] = useState([]);
   const [peerState] = useState('disconnected');
   const [connectedDevice] = useState(null);
+
+  // Multi-Selection State for All Files tab
+  const [selectedFileIds, setSelectedFileIds] = useState(new Set());
+  const [bulkActionModal, setBulkActionModal] = useState(null);
+  const [singleMoveTargetFile, setSingleMoveTargetFile] = useState(null);
+  const [singleMoveMode, setSingleMoveMode] = useState('move');
+  const [destFolderId, setDestFolderId] = useState('');
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+
+  const handleToggleSelectFile = (fileId) => {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  };
+
+  const handleExecuteSingleMoveCopyInLaptopView = async (e) => {
+    if (e) e.preventDefault();
+    if (!singleMoveTargetFile) return;
+    const fileId = singleMoveTargetFile.uuid || singleMoveTargetFile.id || singleMoveTargetFile._id;
+    setIsProcessingBulk(true);
+    setBulkError('');
+    try {
+      if (singleMoveMode === 'move') {
+        await moveFile(fileId, destFolderId || null);
+      } else {
+        await copyFile(fileId, destFolderId || null);
+      }
+      setSingleMoveTargetFile(null);
+    } catch (err) {
+      setBulkError(err.response?.data?.error || err.message || 'Operation failed');
+    } finally {
+      setIsProcessingBulk(false);
+    }
+  };
+
+
+
+  const handleExecuteBulkInLaptopView = async () => {
+    const ids = Array.from(selectedFileIds);
+    if (ids.length === 0) return;
+    setIsProcessingBulk(true);
+    setBulkError('');
+    try {
+      if (bulkActionModal === 'move') {
+        await bulkMoveFiles(ids, destFolderId || null);
+      } else if (bulkActionModal === 'copy') {
+        await bulkCopyFiles(ids, destFolderId || null);
+      } else if (bulkActionModal === 'delete') {
+        await bulkDeleteFiles(ids);
+      }
+      setBulkActionModal(null);
+      setSelectedFileIds(new Set());
+    } catch (err) {
+      setBulkError(err.response?.data?.error || err.message || 'Bulk action failed');
+    } finally {
+      setIsProcessingBulk(false);
+    }
+  };
+
   const [activeNav, setActiveNav] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [selectedFolderCustomerId, setSelectedFolderCustomerId] = useState(null);
+
+  // Derived shop/session identifiers — defined early so all hooks can access them
+  const guestSessionId = useMemo(() => getOrCreateSessionId(), []);
+  const activeShopId = shop?.shopId || null;
+  const targetSessionId = activeShopId ? null : guestSessionId;
+
+  // Track recent toast IDs and socket events to avoid duplicate alerts
+  const recentToastIdsRef = useRef(new Map());
+  const recentEventsRef = useRef(new Map());
 
   const addToast = useCallback((toast) => {
+    const dedupeKey = toast.dedupeKey || toast.file?.uuid || toast.file?.id || toast.file?._id || toast.title;
+    if (dedupeKey) {
+      const lastTime = recentToastIdsRef.current.get(dedupeKey);
+      if (lastTime && Date.now() - lastTime < 6000) {
+        return; // Skip duplicate within 6 seconds
+      }
+      recentToastIdsRef.current.set(dedupeKey, Date.now());
+    }
     const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, ...toast }]);
+    setToasts((prev) => {
+      if (toast.file) {
+        const fid = toast.file.uuid || toast.file.id || toast.file._id;
+        if (fid && prev.some((t) => (t.file?.uuid || t.file?.id || t.file?._id) === fid)) {
+          return prev;
+        }
+      }
+      return [...prev, { id, ...toast }];
+    });
   }, []);
 
   const dismiss = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setToasts([]);
+    recentToastIdsRef.current.clear();
+    recentEventsRef.current.clear();
+    logout();
+  }, [logout]);
+
+  // Request browser notification permission on mount if enabled
+  useEffect(() => {
+    requestNotificationPermission().catch(() => {});
   }, []);
 
   // Listen for real-time socket events
@@ -84,22 +204,64 @@ export function LaptopView() {
     if (!socket) return;
 
     const handleFileReceived = (fileData) => {
+      const fileId = fileData.uuid || fileData.id || fileData._id || `${fileData.originalName}_${fileData.size}`;
+      const lastProcessed = recentEventsRef.current.get(`file_${fileId}`);
+      if (lastProcessed && Date.now() - lastProcessed < 10000) {
+        return; // Prevent duplicate notifications within 10 seconds
+      }
+      recentEventsRef.current.set(`file_${fileId}`, Date.now());
+
       addReceivedFile(fileData);
+
+      const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
+      if (soundEnabled) {
+        playNotificationSound();
+      }
+
+      sendSystemNotification(`📥 New File: ${fileData.originalName || 'Received File'}`, {
+        body: `From: ${fileData.customerName || fileData.deviceName || 'Customer'}`,
+        tag: `file_${fileId}`,
+      });
+
       addToast({
+        dedupeKey: `file_${fileId || fileData.originalName}`,
         type: 'file',
         title: `📥 ${fileData.originalName}`,
-        message: `${fileData.deviceName || 'Mobile'} transferred a file`,
+        message: `${fileData.customerName || fileData.deviceName || 'Mobile'} transferred a file`,
         file: fileData,
       });
+      // Backup: also re-fetch from server to catch any missed/mismatched socket events
+      setTimeout(() => fetchHistory(activeShopId, targetSessionId, token), 1000);
     };
 
     const handleTextReceived = (textData) => {
+      const textId = textData.uuid || textData.id || textData._id || `${textData.text?.slice(0, 15)}`;
+      const lastProcessed = recentEventsRef.current.get(`text_${textId}`);
+      if (lastProcessed && Date.now() - lastProcessed < 10000) {
+        return;
+      }
+      recentEventsRef.current.set(`text_${textId}`, Date.now());
+
       addReceivedText(textData);
+
+      const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
+      if (soundEnabled) {
+        playNotificationSound();
+      }
+
+      sendSystemNotification(`💬 Note from ${textData.customerName || textData.deviceName || 'Customer'}`, {
+        body: textData.text?.slice(0, 60),
+        tag: `text_${textId}`,
+      });
+
       addToast({
+        dedupeKey: `text_${textId || textData.text?.slice(0, 20)}`,
         type: 'text',
-        title: `💬 Note from ${textData.deviceName || 'Mobile'}`,
+        title: `💬 Note from ${textData.customerName || textData.deviceName || 'Mobile'}`,
         message: textData.text?.slice(0, 60),
       });
+      // Backup: also re-fetch from server
+      setTimeout(() => fetchHistory(activeShopId, targetSessionId, token), 1000);
     };
 
     socket.on('file_received', handleFileReceived);
@@ -109,16 +271,13 @@ export function LaptopView() {
       socket.off('file_received', handleFileReceived);
       socket.off('text_received', handleTextReceived);
     };
-  }, [socket, addReceivedFile, addReceivedText, addToast]);
+  }, [socket, addReceivedFile, addReceivedText, addToast, fetchHistory, activeShopId, targetSessionId, token]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('all');
+  const [historyFilter, setHistoryFilter] = useState('all');
   const [qrUrl, setQrUrl] = useState('');
   const [lang, setLang] = useState(() => localStorage.getItem('wifidrop_lang') || 'en');
-
-  const guestSessionId = useMemo(() => getOrCreateSessionId(), []);
-  const activeShopId = shop?.shopId || null;
-  const targetSessionId = activeShopId ? null : guestSessionId;
 
   // Fetch existing history on mount & auto-sync
   useEffect(() => {
@@ -163,9 +322,15 @@ export function LaptopView() {
 
       if (!matchesSearch) return false;
       if (fileFilter === 'all') return true;
-      if (fileFilter === 'images') return file.mimeType?.startsWith('image/');
-      if (fileFilter === 'documents') return file.mimeType?.includes('pdf') || file.mimeType?.includes('word') || file.mimeType?.includes('document') || file.mimeType?.includes('sheet');
-      if (fileFilter === 'media') return file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/');
+
+      const mime = (file.mimeType || '').toLowerCase();
+      const isImg = mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|ico|heic)$/i.test(name);
+      const isDoc = mime.includes('pdf') || mime.includes('word') || mime.includes('document') || mime.includes('sheet') || mime.includes('text') || /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf|csv)$/i.test(name);
+      const isMedia = mime.startsWith('video/') || mime.startsWith('audio/') || /\.(mp4|mp3|mkv|mov|avi|wav|aac|m4a|webm)$/i.test(name);
+
+      if (fileFilter === 'image' || fileFilter === 'images') return isImg;
+      if (fileFilter === 'doc' || fileFilter === 'docc' || fileFilter === 'documents') return isDoc;
+      if (fileFilter === 'media') return isMedia;
       return true;
     });
   }, [files, searchQuery, fileFilter]);
@@ -196,15 +361,32 @@ export function LaptopView() {
 
   // Filtered combined timeline items
   const filteredHistory = useMemo(() => {
-    if (!searchQuery) return combinedHistory;
-    const q = searchQuery.toLowerCase();
     return combinedHistory.filter((item) => {
+      const isFile = item._type === 'file' || item.itemType === 'file' || Boolean(item.originalName || item.size);
       const name = (item.originalName || item.originalname || item.name || item.text || '').toLowerCase();
       const devName = (item.deviceName || '').toLowerCase();
       const custName = (item.customerName || '').toLowerCase();
-      return name.includes(q) || devName.includes(q) || custName.includes(q);
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !searchQuery || name.includes(q) || devName.includes(q) || custName.includes(q);
+
+      if (!matchesSearch) return false;
+      if (historyFilter === 'all') return true;
+      if (historyFilter === 'texts' || historyFilter === 'text') return !isFile;
+      if (historyFilter === 'files') return isFile;
+
+      if (isFile) {
+        const mime = (item.mimeType || '').toLowerCase();
+        const isImg = mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|ico|heic)$/i.test(name);
+        const isDoc = mime.includes('pdf') || mime.includes('word') || mime.includes('document') || mime.includes('sheet') || mime.includes('text') || /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf|csv)$/i.test(name);
+        const isMedia = mime.startsWith('video/') || mime.startsWith('audio/') || /\.(mp4|mp3|mkv|mov|avi|wav|aac|m4a|webm)$/i.test(name);
+
+        if (historyFilter === 'image' || historyFilter === 'images') return isImg;
+        if (historyFilter === 'doc' || historyFilter === 'docc' || historyFilter === 'documents') return isDoc;
+        if (historyFilter === 'media') return isMedia;
+      }
+      return true;
     });
-  }, [combinedHistory, searchQuery]);
+  }, [combinedHistory, searchQuery, historyFilter]);
 
   // Unprinted files count
   const unprintedCount = useMemo(() => {
@@ -294,14 +476,14 @@ export function LaptopView() {
               {shop ? (
                 <div className="shop-badge flex items-center gap-1">
                   <span className="shop-name">🏪 {shop.shopName}</span>
-                  <button className="btn btn-ghost btn-xs logout-btn" onClick={logout}>Logout</button>
+                  <button className="btn btn-ghost btn-xs logout-btn" onClick={handleLogout}>Logout</button>
                 </div>
               ) : (
                 <div className="auth-actions flex items-center gap-1">
-                  <a href="/login" className="btn btn-ghost btn-xs header-auth-btn">Login</a>
-                  <a href="/register" className="btn btn-primary btn-xs header-auth-btn">
+                  <button className="btn btn-ghost btn-xs header-auth-btn" onClick={() => navigate('/login')}>Login</button>
+                  <button className="btn btn-primary btn-xs header-auth-btn" onClick={() => navigate('/register')}>
                     <span>🏪</span> Register
-                  </a>
+                  </button>
                 </div>
               )}
             </div>
@@ -346,7 +528,23 @@ export function LaptopView() {
                 onTogglePrint={togglePrintStatus}
                 sessionId={sessionId}
                 shop={shop}
+                initialCustomerId={selectedFolderCustomerId}
+                onSelectCustomer={setSelectedFolderCustomerId}
+                shopFolders={shopFolders}
+                onCreateShopFolder={createShopFolder}
+                onFetchShopFolders={fetchShopFolders}
+                onUploadFilesToFolder={uploadFilesToFolder}
+                onDeleteShopFolder={deleteShopFolder}
+                onRenameShopFolder={renameShopFolder}
+                onMoveFile={moveFile}
+                onCopyFile={copyFile}
+                onBulkMoveFiles={bulkMoveFiles}
+                onBulkCopyFiles={bulkCopyFiles}
+                onBulkDeleteFiles={bulkDeleteFiles}
               />
+
+
+
             )}
 
             {/* ── 2. ALL FILES ── */}
@@ -370,6 +568,14 @@ export function LaptopView() {
                           file={file}
                           onDelete={handleDeleteFile}
                           onTogglePrint={togglePrintStatus}
+                          onMoveCopy={(f) => {
+                            setSingleMoveTargetFile(f);
+                            setDestFolderId(f.folderId || '');
+                            setBulkError('');
+                          }}
+                          isSelectable={true}
+                          isSelected={selectedFileIds.has(file.uuid || file.id || file._id)}
+                          onSelectToggle={handleToggleSelectFile}
                         />
                       ))}
                     </AnimatePresence>
@@ -377,6 +583,201 @@ export function LaptopView() {
                 )}
               </>
             )}
+
+            {/* ── Single File Move / Copy Modal in LaptopView ── */}
+            {singleMoveTargetFile && activeNav === 'files' && (
+              <div className="rename-modal-overlay" onClick={() => setSingleMoveTargetFile(null)}>
+                <motion.div
+                  className="rename-modal"
+                  style={{ maxWidth: '480px' }}
+                  onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <div className="rename-modal-header">
+                    <div className="rename-icon-badge" style={{ background: '#EEF2FF', borderColor: '#C7D2FE' }}>📂</div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 className="rename-modal-title">Move / Copy File</h3>
+                      <p className="rename-modal-sub" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={singleMoveTargetFile.originalName}>
+                        {singleMoveTargetFile.originalName || singleMoveTargetFile.name || 'File'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleExecuteSingleMoveCopyInLaptopView}>
+                    <div className="rename-modal-body" style={{ gap: '14px' }}>
+                      <div>
+                        <label className="rename-input-label">Action Select Karo</label>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${singleMoveMode === 'move' ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => setSingleMoveMode('move')}
+                          >
+                            🚚 Move (स्थान परिवर्तन)
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${singleMoveMode === 'copy' ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => setSingleMoveMode('copy')}
+                          >
+                            📋 Copy (प्रतिलिपि)
+                          </button>
+                        </div>
+                      </div>
+
+                        <div>
+                          <label className="rename-input-label" style={{ marginBottom: '6px' }}>Target Folder Chuno *</label>
+                          <FolderPicker
+                            shopFolders={shopFolders}
+                            files={files}
+                            selectedFolderId={destFolderId}
+                            onSelectFolder={(id) => setDestFolderId(id)}
+                          />
+                        </div>
+
+
+                      {bulkError && (
+                        <p style={{ color: '#DC2626', fontSize: '0.78rem', margin: '4px 0 0', fontWeight: 600 }}>
+                          ❌ {bulkError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="rename-modal-actions" style={{ marginTop: '16px' }}>
+                      <button type="button" className="btn btn-ghost rename-btn" onClick={() => setSingleMoveTargetFile(null)}>
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn btn-primary rename-btn" disabled={isProcessingBulk}>
+                        {isProcessingBulk ? '⏳ Processing...' : singleMoveMode === 'move' ? '🚚 Move File' : '📋 Copy File'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </div>
+            )}
+
+
+            {/* ── Floating Sticky Bulk Action Bar for All Files ── */}
+            <AnimatePresence>
+              {activeNav === 'files' && selectedFileIds.size > 0 && (
+                <motion.div
+                  className="bulk-floating-bar"
+                  initial={{ y: 80, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 80, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="bulk-bar-content">
+                    <span className="bulk-badge">☑️ {selectedFileIds.size} Selected</span>
+                    <div className="bulk-bar-buttons">
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ background: '#4F46E5' }}
+                        onClick={() => { setBulkActionModal('move'); setDestFolderId(''); setBulkError(''); }}
+                      >
+                        🚚 Move
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => { setBulkActionModal('copy'); setDestFolderId(''); setBulkError(''); }}
+                      >
+                        📋 Copy
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => { setBulkActionModal('delete'); setBulkError(''); }}
+                      >
+                        🗑️ Delete
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: '#64748B' }}
+                        onClick={() => setSelectedFileIds(new Set())}
+                        title="Clear Selection"
+                      >
+                        ✕ Clear
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── Bulk Action Modal in LaptopView ── */}
+            {bulkActionModal && activeNav === 'files' && (
+              <div className="rename-modal-overlay" onClick={() => setBulkActionModal(null)}>
+                <motion.div
+                  className="rename-modal"
+                  style={{ maxWidth: '480px' }}
+                  onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <div className="rename-modal-header">
+                    <div className="rename-icon-badge" style={{
+                      background: bulkActionModal === 'delete' ? '#FEE2E2' : '#EEF2FF',
+                      borderColor: bulkActionModal === 'delete' ? '#FECACA' : '#C7D2FE'
+                    }}>
+                      {bulkActionModal === 'move' ? '🚚' : bulkActionModal === 'copy' ? '📋' : '🗑️'}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 className="rename-modal-title" style={{ color: bulkActionModal === 'delete' ? '#DC2626' : undefined }}>
+                        {bulkActionModal === 'move' ? 'Bulk Move Files' : bulkActionModal === 'copy' ? 'Bulk Copy Files' : 'Bulk Delete Files'}
+                      </h3>
+                      <p className="rename-modal-sub">{selectedFileIds.size} files selected</p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={(e) => { e.preventDefault(); handleExecuteBulkInLaptopView(); }}>
+                    <div className="rename-modal-body" style={{ gap: '14px' }}>
+                      {bulkActionModal === 'delete' ? (
+                        <p style={{ fontSize: '0.86rem', color: '#475569', lineHeight: 1.5 }}>
+                          ⚠️ Kya aap sach me select ki gayi <strong>{selectedFileIds.size} files</strong> ko delete karna chahte hain?
+                        </p>
+                      ) : (
+                        <div>
+                          <label className="rename-input-label" style={{ marginBottom: '6px' }}>Target Folder Chuno *</label>
+                          <FolderPicker
+                            shopFolders={shopFolders}
+                            files={files}
+                            selectedFolderId={destFolderId}
+                            onSelectFolder={(id) => setDestFolderId(id)}
+                          />
+                        </div>
+
+                      )}
+
+                      {bulkError && (
+                        <p style={{ color: '#DC2626', fontSize: '0.78rem', margin: '4px 0 0', fontWeight: 600 }}>
+                          ❌ {bulkError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="rename-modal-actions" style={{ marginTop: '16px' }}>
+                      <button type="button" className="btn btn-ghost rename-btn" onClick={() => setBulkActionModal(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className={`btn rename-btn ${bulkActionModal === 'delete' ? 'btn-danger' : 'btn-primary'}`}
+                        disabled={isProcessingBulk}
+                      >
+                        {isProcessingBulk ? '⏳ Processing...' : `${bulkActionModal === 'move' ? '🚚 Move' : bulkActionModal === 'copy' ? '📋 Copy' : '🗑️ Delete'} (${selectedFileIds.size})`}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </div>
+            )}
+
 
             {/* ── 3. TEXT NOTES ── */}
             {activeNav === 'texts' && (
@@ -393,8 +794,7 @@ export function LaptopView() {
               <PrintPage
                 files={files}
                 onTogglePrint={togglePrintStatus}
-                onDeleteFile={handleDeleteFile}
-                shopId={shop?.shopId}
+                onDelete={handleDeleteFile}
                 shop={shop}
               />
             )}
@@ -414,7 +814,12 @@ export function LaptopView() {
               <CustomersPage
                 files={files}
                 texts={texts}
-                onNavChange={setActiveNav}
+                onNavChange={(nav, targetCustId) => {
+                  if (targetCustId) {
+                    setSelectedFolderCustomerId(targetCustId);
+                  }
+                  setActiveNav(nav);
+                }}
                 shop={shop}
               />
             )}
@@ -439,13 +844,16 @@ export function LaptopView() {
 
             {/* ── 9. FULL HISTORY ── */}
             {activeNav === 'history' && (
-              <TimelineHistory
-                items={filteredHistory}
-                combinedHistory={filteredHistory}
-                onDeleteFile={handleDeleteFile}
-                onDeleteText={handleDeleteText}
-                onTogglePrint={togglePrintStatus}
-              />
+              <>
+                <CategoryFilter currentFilter={historyFilter} onFilterChange={setHistoryFilter} />
+                <TimelineHistory
+                  items={filteredHistory}
+                  combinedHistory={filteredHistory}
+                  onDeleteFile={handleDeleteFile}
+                  onDeleteText={handleDeleteText}
+                  onTogglePrint={togglePrintStatus}
+                />
+              </>
             )}
 
             {/* ── 10. COUNTER STANDEE ── */}
@@ -454,6 +862,7 @@ export function LaptopView() {
                 <QRStandee
                   qrDataUrl={qrUrl}
                   shopName={shop ? shop.shopName : 'Direct Print & File Drop'}
+                  shopId={shop ? (shop.shopId || shop.id) : sessionId}
                   sessionId={sessionId}
                 />
               </div>
@@ -523,24 +932,30 @@ export function LaptopView() {
           flex-direction: column;
           min-width: 0;
           height: 100vh;
-          width: calc(100% - 260px);
+          width: 100%;
           max-width: 100%;
           overflow-y: auto;
           overflow-x: hidden;
           box-sizing: border-box;
+          position: relative;
         }
 
         .main-header {
           padding: var(--space-4) var(--space-6);
           border-bottom: 1px solid var(--border);
-          background: var(--bg-secondary);
+          background: rgba(255, 255, 255, 0.97);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
           display: flex;
           flex-direction: column;
           gap: 10px;
           position: sticky;
           top: 0;
-          z-index: 10;
+          z-index: 100;
           width: 100%;
+          flex-shrink: 0;
+          box-sizing: border-box;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
         }
 
         .header-top-row {
@@ -616,7 +1031,6 @@ export function LaptopView() {
         .content-area {
           flex: 1;
           padding: 1.5rem 2rem;
-          overflow-y: auto;
           width: 100%;
           max-width: 100%;
           box-sizing: border-box;
@@ -697,17 +1111,18 @@ export function LaptopView() {
         /* ── Responsive Tablet Breakpoints (<1024px) ── */
         @media (max-width: 1024px) {
           .laptop-layout {
-            height: auto;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: visible;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
           }
 
           .laptop-main {
             width: 100%;
-            height: auto;
-            min-height: 100vh;
-            overflow-y: visible;
+            height: 100vh;
+            height: 100dvh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
           }
 
           .mobile-hamburger-btn {
@@ -752,6 +1167,10 @@ export function LaptopView() {
 
           .content-area {
             padding: 0.875rem 0.75rem 5.5rem; /* Extra bottom padding for mobile bottom bar */
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow-x: hidden;
           }
 
           .mobile-bottom-nav {

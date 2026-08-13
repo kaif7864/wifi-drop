@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { navigate } from '../App';
 
 export function ShopLogin() {
   const { login } = useAuth();
@@ -19,7 +20,7 @@ export function ShopLogin() {
     setLoading(true);
     try {
       await login(input, password);
-      window.location.href = '/';
+      navigate('/', true); // replaceState — login page removed from history
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Check credentials.');
     } finally {
@@ -69,7 +70,7 @@ export function ShopLogin() {
         </form>
 
         <div className="auth-footer">
-          <p>Don't have a shop account? <a href="/register" className="auth-link">Register Shop</a></p>
+          <p>Don't have a shop account? <button className="auth-link" style={{background:'none',border:'none',padding:0,cursor:'pointer'}} onClick={() => navigate('/register')}>Register Shop</button></p>
         </div>
       </div>
 

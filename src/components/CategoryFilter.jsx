@@ -9,10 +9,11 @@ export function CategoryFilter({ currentFilter, onFilterChange }) {
     { key: 'image', label: '🖼️ Images' },
     { key: 'doc', label: '📄 Documents' },
     { key: 'media', label: '🎬 Audio/Video' },
+    { key: 'other', label: '📦 Other / Zip' },
   ];
 
   return (
-    <div className="filter-bar flex items-center gap-2">
+    <div className="filter-bar">
       {filters.map(({ key, label }) => (
         <button
           key={key}
@@ -26,28 +27,27 @@ export function CategoryFilter({ currentFilter, onFilterChange }) {
 
       <style>{`
         .filter-bar {
-          margin-bottom: var(--space-5);
-          display: flex;
-          align-items: center;
-          gap: var(--space-2);
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 4px;
+          margin-bottom: var(--space-4);
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 8px;
           width: 100%;
+          box-sizing: border-box;
         }
 
         .filter-chip {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
-          padding: 8px 16px;
+          padding: 9px 8px;
           border-radius: var(--radius-full);
-          border: 1px solid var(--border);
+          border: 1.5px solid var(--border);
           background: #ffffff;
           color: var(--text-secondary);
           font-family: var(--font-family);
           font-size: var(--font-size-xs);
-          font-weight: 600;
+          font-weight: 700;
           cursor: pointer;
           transition: all 0.2s ease;
           outline: none;
@@ -55,7 +55,9 @@ export function CategoryFilter({ currentFilter, onFilterChange }) {
           appearance: none;
           -webkit-appearance: none;
           white-space: nowrap;
-          flex-shrink: 0;
+          width: 100%;
+          text-align: center;
+          box-sizing: border-box;
         }
 
         .filter-chip:hover {
@@ -72,22 +74,15 @@ export function CategoryFilter({ currentFilter, onFilterChange }) {
           box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important;
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
           .filter-bar {
-            margin-bottom: var(--space-3);
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
             gap: 4px;
-            overflow: visible;
-            padding-bottom: 0;
+            margin-bottom: var(--space-3);
           }
           .filter-chip {
-            padding: 6px 2px;
-            font-size: 10.5px;
-            font-weight: 700;
-            width: 100%;
-            justify-content: center;
-            text-align: center;
+            padding: 7px 2px;
+            font-size: 10px;
+            gap: 3px;
           }
         }
       `}</style>

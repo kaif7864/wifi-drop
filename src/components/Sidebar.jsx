@@ -274,6 +274,32 @@ export function Sidebar({
             color: var(--text-muted);
           }
 
+          .server-status {
+            padding: 10px 14px;
+            background: #FFFFFF;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-full);
+            margin-top: auto;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+          }
+
+          .server-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-left: 2px;
+          }
+
+          .server-status .status-text {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            white-space: nowrap;
+          }
+
           .mt-auto { margin-top: auto; }
 
           /* ── Mobile Responsive Sidebar (<1024px) ── */
