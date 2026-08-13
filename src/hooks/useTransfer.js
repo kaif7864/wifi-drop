@@ -51,6 +51,9 @@ export function useTransfer(shopId = null) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
 
+  // ── Shop Owner Custom Folders ─────────────────────────────────────────────
+  const [shopFolders, setShopFolders] = useState([]);
+
   const prevShopIdRef = useRef(shopId);
 
   // Sync state whenever shopId transitions (login / logout)
@@ -138,7 +141,7 @@ export function useTransfer(shopId = null) {
   }, [shopId]);
 
   // ── Upload files from mobile ──────────────────────────────────────────────
-  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null, shopId = 'default', customerId = null, customerName = null, deviceId = null, fileNotes = {}) => {
+  const uploadFiles = useCallback(async (fileList, deviceName, sessionId = null, shopId = 'default', customerId = null, customerName = null, deviceId = null, fileNotes = {}, folderId = null) => {
     setUploading(true);
     setUploadProgress(0);
     setError(null);
@@ -150,6 +153,7 @@ export function useTransfer(shopId = null) {
     if (customerId) formData.append('customerId', customerId);
     if (customerName) formData.append('customerName', customerName);
     if (deviceId) formData.append('deviceId', deviceId);
+    if (folderId) formData.append('folderId', folderId);
     if (fileNotes && Object.keys(fileNotes).length > 0) {
       formData.append('fileNotes', JSON.stringify(fileNotes));
     }
@@ -303,9 +307,227 @@ export function useTransfer(shopId = null) {
     }
   }, []);
 
+  // ── Create a new shop folder ───────────────────────────────────────────────
+  const createShopFolder = useCallback(async ({ folderName, description = '' }) => {
+    const token = localStorage.getItem('wifidrop_token');
+    if (!token) throw new Error('Not authenticated');
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/api/folders`,
+        { folderName, description, shopId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (response.data.success) {
+        setShopFolders((prev) => [response.data.folder, ...prev]);
+      }
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, [shopId]);
+
+  // ── Fetch shop owner's custom folders ─────────────────────────────────────
+  const fetchShopFolders = useCallback(async () => {
+    if (!isShopOwner) return;
+    const token = localStorage.getItem('wifidrop_token');
+    if (!token) return;
+    try {
+      const response = await axios.get(`${BASE_URL}/api/folders`, {
+        params: { shopId },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.data.success) {
+        setShopFolders(response.data.folders || []);
+      }
+    } catch (err) {
+      console.warn('[fetchShopFolders]:', err.message);
+    }
+  }, [shopId, isShopOwner]);
+
+  // ── Upload files into a specific shop folder ───────────────────────────────
+  const uploadFilesToFolder = useCallback(async (fileList, folderId, customerName = '') => {
+    setUploading(true);
+    setUploadProgress(0);
+    setError(null);
+    const token = localStorage.getItem('wifidrop_token');
+
+    const formData = new FormData();
+    formData.append('shopId', shopId || 'default');
+    formData.append('folderId', folderId);
+    formData.append('deviceName', 'Shop Owner');
+    formData.append('uploadMethod', 'web');
+    if (customerName) formData.append('customerName', customerName);
+    Array.from(fileList).forEach((file) => formData.append('files', file));
+
+    try {
+      const response = await axios.post(`${BASE_URL}/api/upload`, formData, {
+        timeout: 90000,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        onUploadProgress: (progressEvent) => {
+          const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+          setUploadProgress(percent);
+        },
+      });
+      // Refresh folder stats after upload
+      await fetchShopFolders();
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    } finally {
+      setUploading(false);
+    }
+  }, [shopId, fetchShopFolders]);
+
+  // ── Delete a shop folder ──────────────────────────────────────────────────
+  const deleteShopFolder = useCallback(async (folderId) => {
+    const token = localStorage.getItem('wifidrop_token');
+    if (!token) throw new Error('Not authenticated');
+    try {
+      await axios.delete(`${BASE_URL}/api/folders/${folderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setShopFolders((prev) => prev.filter((f) => f.folderId !== folderId));
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, []);
+  // ── Rename/Update a shop folder ───────────────────────────────────────────
+  const renameShopFolder = useCallback(async (folderId, { folderName, description }) => {
+    const token = localStorage.getItem('wifidrop_token');
+    if (!token) throw new Error('Not authenticated');
+    try {
+      const response = await axios.patch(
+        `${BASE_URL}/api/folders/${folderId}`,
+        { folderName, description },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (response.data.success) {
+        setShopFolders((prev) =>
+          prev.map((f) => (f.folderId === folderId ? { ...f, folderName, description } : f))
+        );
+      }
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+  // ── Move a file to a folder ────────────────────────────────────────────────
+  const moveFile = useCallback(async (fileId, targetFolderId) => {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/files/${fileId}/move`, { targetFolderId });
+      if (response.data.success) {
+        const updates = response.data.updates || (
+          targetFolderId && targetFolderId.startsWith('cust_')
+            ? { customerId: targetFolderId, folderId: null }
+            : { folderId: targetFolderId || null, customerId: null }
+        );
+        setFiles((prev) =>
+          prev.map((f) => {
+            const fId = f.uuid || f.id || f._id;
+            if (fId === fileId) {
+              return { ...f, ...updates };
+            }
+            return f;
+          })
+        );
+      }
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+  // ── Copy a file to a folder ────────────────────────────────────────────────
+  const copyFile = useCallback(async (fileId, targetFolderId) => {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/files/${fileId}/copy`, { targetFolderId });
+      if (response.data.success && response.data.file) {
+        setFiles((prev) => [response.data.file, ...prev]);
+      }
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+  // ── Bulk Move Files ─────────────────────────────────────────────────────────
+  const bulkMoveFiles = useCallback(async (fileIds, targetFolderId) => {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/files/bulk-move`, { fileIds, targetFolderId });
+      if (response.data.success) {
+        const idSet = new Set(fileIds);
+        const updates = response.data.updates || (
+          targetFolderId && targetFolderId.startsWith('cust_')
+            ? { customerId: targetFolderId, folderId: null }
+            : { folderId: targetFolderId || null, customerId: null }
+        );
+        setFiles((prev) =>
+          prev.map((f) => {
+            const fId = f.uuid || f.id || f._id;
+            if (idSet.has(fId)) {
+              return { ...f, ...updates };
+            }
+            return f;
+          })
+        );
+      }
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+
+  // ── Bulk Copy Files ─────────────────────────────────────────────────────────
+  const bulkCopyFiles = useCallback(async (fileIds, targetFolderId) => {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/files/bulk-copy`, { fileIds, targetFolderId });
+      if (response.data.success && Array.isArray(response.data.files)) {
+        setFiles((prev) => [...response.data.files, ...prev]);
+      }
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+  // ── Bulk Delete Files ───────────────────────────────────────────────────────
+  const bulkDeleteFiles = useCallback(async (fileIds) => {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/files/bulk-delete`, { fileIds });
+      if (response.data.success) {
+        const idSet = new Set(fileIds);
+        setFiles((prev) => prev.filter((f) => !idSet.has(f.uuid || f.id || f._id)));
+      }
+      return response.data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      throw err;
+    }
+  }, []);
+
   return {
     files,
     texts,
+    shopFolders,
     uploading,
     uploadProgress,
     error,
@@ -318,5 +540,18 @@ export function useTransfer(shopId = null) {
     deleteCustomerFolder,
     togglePrintStatus,
     fetchHistory,
+    createShopFolder,
+    fetchShopFolders,
+    uploadFilesToFolder,
+    deleteShopFolder,
+    renameShopFolder,
+    moveFile,
+    copyFile,
+    bulkMoveFiles,
+    bulkCopyFiles,
+    bulkDeleteFiles,
   };
 }
+
+
+

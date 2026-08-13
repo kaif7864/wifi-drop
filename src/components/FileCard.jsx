@@ -64,7 +64,7 @@ function getFileIcon(mimeType = '') {
 
 import { isFileInBill, toggleFileInBill } from '../utils/billManager';
 
-export function FileCard({ file, onDelete, onTogglePrint }) {
+export function FileCard({ file, onDelete, onTogglePrint, onMoveCopy, isSelectable = true, isSelected = false, onSelectToggle }) {
   const [showPreview, setShowPreview] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [imgRotation, setImgRotation] = useState(0);
@@ -100,17 +100,18 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
     if (urlStr.startsWith('http://') || urlStr.startsWith('https://') || urlStr.startsWith('blob:')) {
       return urlStr;
     }
-    return `${config.serverUrl}${urlStr}`;
+    return `${config.serverUrl}${urlStr.startsWith('/') ? '' : '/'}${urlStr}`;
   };
 
-  const previewUrl = file.isP2P ? file.previewUrl : getFullUrl(`/api/files/${fileId}/preview`);
-  const downloadUrl = file.isP2P ? file.downloadUrl : getFullUrl(`/api/files/${fileId}/download`);
+  const previewUrl = getFullUrl(file.previewUrl || file.downloadUrl || `/api/files/${fileId}/preview`);
 
   // Direct trigger download handling
-  const handleDownload = async () => {
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    const url = file.isP2P ? file.downloadUrl : getFullUrl(`/api/files/${fileId}/download`);
     if (file.isP2P) {
       const a = document.createElement('a');
-      a.href = file.downloadUrl;
+      a.href = url;
       a.download = file.originalName;
       document.body.appendChild(a);
       a.click();
@@ -120,7 +121,7 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
 
     try {
       setIsDownloading(true);
-      const res = await fetch(downloadUrl);
+      const res = await fetch(url);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       
@@ -133,13 +134,14 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
       URL.revokeObjectURL(blobUrl);
     } catch {
       // Fallback window open
-      window.open(downloadUrl, '_blank');
+      window.open(url, '_blank');
     } finally {
       setIsDownloading(false);
     }
   };
 
-  const handleOpenInNewTab = () => {
+  const handleOpenInNewTab = (e) => {
+    e.stopPropagation();
     window.open(previewUrl, '_blank');
   };
 
@@ -150,12 +152,13 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
     } catch {}
   };
 
-  const togglePrint = async () => {
+  const togglePrint = async (e) => {
+    e.stopPropagation();
     if (onTogglePrint) {
       onTogglePrint(file);
     } else {
       try {
-        await axios.patch(`${config.serverUrl}/api/files/${file.uuid || file.id || file._id}/print`);
+        await fetch(`${config.serverUrl}/api/files/${fileId}/print`, { method: 'PATCH' });
       } catch {}
     }
   };
@@ -208,15 +211,44 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
   return (
     <>
       <motion.div
-        className={`file-card glass-card ${isPrinted ? 'file-printed' : ''}`}
+        className={`file-card glass-card ${isPrinted ? 'file-printed' : ''} ${isSelected ? 'selected' : ''}`}
+        style={{
+          borderLeft: isPrinted ? '4px solid #10B981' : (isSelected ? '4px solid #6366F1' : '4px solid transparent'),
+          background: isSelected ? '#EEF2FF' : undefined,
+        }}
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
         layout
+        onClick={(e) => {
+          if (e.target.tagName === 'INPUT' || e.target.closest('button')) return;
+          if (isSelectable && onSelectToggle) onSelectToggle(fileId);
+        }}
       >
-        {/* Left: icon + info */}
+        {/* Left: checkbox + icon + info */}
         <div className="file-left" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+          {isSelectable && (
+            <input
+              type="checkbox"
+              className="file-select-checkbox"
+              checked={Boolean(isSelected)}
+              onChange={(e) => {
+                e.stopPropagation();
+                if (onSelectToggle) onSelectToggle(fileId);
+              }}
+              onClick={(e) => e.stopPropagation()}
+
+              style={{
+                width: '18px',
+                height: '18px',
+                accentColor: '#4F46E5',
+                cursor: 'pointer',
+                flexShrink: 0,
+                marginRight: '8px',
+              }}
+            />
+          )}
           <div className="file-icon" style={{ flexShrink: 0 }}>{getFileIcon(file.mimeType)}</div>
           <div className="file-info" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
             <p className="file-name" title={file.originalName} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, width: '100%' }}>
@@ -308,11 +340,21 @@ export function FileCard({ file, onDelete, onTogglePrint }) {
                 👁️
               </button>
             )}
+            {onMoveCopy && (
+              <button
+                className="btn-icon"
+                title="Move or Copy file to another folder"
+                onClick={() => onMoveCopy(file)}
+              >
+                📂
+              </button>
+            )}
             <button
               className="btn-icon"
               title="Open in new tab"
               onClick={handleOpenInNewTab}
             >
+
               ↗️
             </button>
             <button

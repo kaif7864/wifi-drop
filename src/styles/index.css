@@ -467,3 +467,163 @@ a:hover { color: var(--accent-secondary); }
     touch-action: manipulation;
   }
 }
+
+/* ── Global Modal Overlay & Styling ── */
+.rename-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.rename-modal {
+  background: #ffffff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 480px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22);
+  border: 1px solid #E2E8F0;
+  box-sizing: border-box;
+}
+
+/* ── Clean Dropdown Select Styling ── */
+select.rename-text-input,
+.rename-text-input {
+  height: 46px !important;
+  line-height: 1.4 !important;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
+  border: 1.5px solid #CBD5E1 !important;
+  background-color: #FFFFFF !important;
+  color: #1E293B !important;
+  transition: all 0.15s ease !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  appearance: auto !important;
+  -webkit-appearance: auto !important;
+  font-family: inherit !important;
+}
+
+select.rename-text-input:focus,
+.rename-text-input:focus {
+  border-color: #4F46E5 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+}
+
+select.rename-text-input option {
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  color: #1E293B;
+  background: #FFFFFF;
+}
+
+
+.rename-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.rename-icon-badge {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.rename-modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 0;
+}
+
+.rename-modal-sub {
+  font-size: 0.82rem;
+  color: #64748B;
+  margin: 2px 0 0;
+}
+
+.rename-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rename-input-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #475569;
+  display: block;
+}
+
+.rename-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.rename-btn {
+  padding: 8px 18px;
+  font-size: 0.86rem;
+  border-radius: 10px;
+}
+
+/* ── Floating Sticky Bulk Action Bar ── */
+.bulk-floating-bar {
+  position: fixed !important;
+  bottom: 28px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 9999 !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 9999px !important;
+  padding: 10px 22px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4) !important;
+}
+
+.bulk-bar-content {
+  display: flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+}
+
+.bulk-badge {
+  color: #F8FAFC !important;
+  font-weight: 700 !important;
+  font-size: 0.88rem !important;
+  white-space: nowrap !important;
+}
+
+.bulk-bar-buttons {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+

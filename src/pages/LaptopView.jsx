@@ -17,6 +17,8 @@ import { CategoryFilter } from '../components/CategoryFilter';
 import { QRStandee } from '../components/QRStandee';
 import { Sidebar } from '../components/Sidebar';
 import { CustomerFolders } from '../components/CustomerFolders';
+import { FolderPicker } from '../components/FolderPicker';
+
 import { DashboardPage } from './dashboard/DashboardPage';
 import { PrintPage } from './dashboard/PrintPage';
 import { BillingPage } from './dashboard/BillingPage';
@@ -60,16 +62,93 @@ export function LaptopView() {
 
   const {
     files, texts,
+    shopFolders,
     addReceivedFile, addReceivedText,
     deleteFile, deleteText,
     deleteCustomerFolder,
     togglePrintStatus,
     fetchHistory,
+    createShopFolder,
+    fetchShopFolders,
+    uploadFilesToFolder,
+    deleteShopFolder,
+    renameShopFolder,
+    moveFile,
+    copyFile,
+    bulkMoveFiles,
+    bulkCopyFiles,
+    bulkDeleteFiles,
   } = useTransfer(shop?.shopId);
+
+
+
 
   const [toasts, setToasts] = useState([]);
   const [peerState] = useState('disconnected');
   const [connectedDevice] = useState(null);
+
+  // Multi-Selection State for All Files tab
+  const [selectedFileIds, setSelectedFileIds] = useState(new Set());
+  const [bulkActionModal, setBulkActionModal] = useState(null);
+  const [singleMoveTargetFile, setSingleMoveTargetFile] = useState(null);
+  const [singleMoveMode, setSingleMoveMode] = useState('move');
+  const [destFolderId, setDestFolderId] = useState('');
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+
+  const handleToggleSelectFile = (fileId) => {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  };
+
+  const handleExecuteSingleMoveCopyInLaptopView = async (e) => {
+    if (e) e.preventDefault();
+    if (!singleMoveTargetFile) return;
+    const fileId = singleMoveTargetFile.uuid || singleMoveTargetFile.id || singleMoveTargetFile._id;
+    setIsProcessingBulk(true);
+    setBulkError('');
+    try {
+      if (singleMoveMode === 'move') {
+        await moveFile(fileId, destFolderId || null);
+      } else {
+        await copyFile(fileId, destFolderId || null);
+      }
+      setSingleMoveTargetFile(null);
+    } catch (err) {
+      setBulkError(err.response?.data?.error || err.message || 'Operation failed');
+    } finally {
+      setIsProcessingBulk(false);
+    }
+  };
+
+
+
+  const handleExecuteBulkInLaptopView = async () => {
+    const ids = Array.from(selectedFileIds);
+    if (ids.length === 0) return;
+    setIsProcessingBulk(true);
+    setBulkError('');
+    try {
+      if (bulkActionModal === 'move') {
+        await bulkMoveFiles(ids, destFolderId || null);
+      } else if (bulkActionModal === 'copy') {
+        await bulkCopyFiles(ids, destFolderId || null);
+      } else if (bulkActionModal === 'delete') {
+        await bulkDeleteFiles(ids);
+      }
+      setBulkActionModal(null);
+      setSelectedFileIds(new Set());
+    } catch (err) {
+      setBulkError(err.response?.data?.error || err.message || 'Bulk action failed');
+    } finally {
+      setIsProcessingBulk(false);
+    }
+  };
+
   const [activeNav, setActiveNav] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedFolderCustomerId, setSelectedFolderCustomerId] = useState(null);
@@ -451,7 +530,21 @@ export function LaptopView() {
                 shop={shop}
                 initialCustomerId={selectedFolderCustomerId}
                 onSelectCustomer={setSelectedFolderCustomerId}
+                shopFolders={shopFolders}
+                onCreateShopFolder={createShopFolder}
+                onFetchShopFolders={fetchShopFolders}
+                onUploadFilesToFolder={uploadFilesToFolder}
+                onDeleteShopFolder={deleteShopFolder}
+                onRenameShopFolder={renameShopFolder}
+                onMoveFile={moveFile}
+                onCopyFile={copyFile}
+                onBulkMoveFiles={bulkMoveFiles}
+                onBulkCopyFiles={bulkCopyFiles}
+                onBulkDeleteFiles={bulkDeleteFiles}
               />
+
+
+
             )}
 
             {/* ── 2. ALL FILES ── */}
@@ -475,6 +568,14 @@ export function LaptopView() {
                           file={file}
                           onDelete={handleDeleteFile}
                           onTogglePrint={togglePrintStatus}
+                          onMoveCopy={(f) => {
+                            setSingleMoveTargetFile(f);
+                            setDestFolderId(f.folderId || '');
+                            setBulkError('');
+                          }}
+                          isSelectable={true}
+                          isSelected={selectedFileIds.has(file.uuid || file.id || file._id)}
+                          onSelectToggle={handleToggleSelectFile}
                         />
                       ))}
                     </AnimatePresence>
@@ -482,6 +583,201 @@ export function LaptopView() {
                 )}
               </>
             )}
+
+            {/* ── Single File Move / Copy Modal in LaptopView ── */}
+            {singleMoveTargetFile && activeNav === 'files' && (
+              <div className="rename-modal-overlay" onClick={() => setSingleMoveTargetFile(null)}>
+                <motion.div
+                  className="rename-modal"
+                  style={{ maxWidth: '480px' }}
+                  onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <div className="rename-modal-header">
+                    <div className="rename-icon-badge" style={{ background: '#EEF2FF', borderColor: '#C7D2FE' }}>📂</div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 className="rename-modal-title">Move / Copy File</h3>
+                      <p className="rename-modal-sub" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={singleMoveTargetFile.originalName}>
+                        {singleMoveTargetFile.originalName || singleMoveTargetFile.name || 'File'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleExecuteSingleMoveCopyInLaptopView}>
+                    <div className="rename-modal-body" style={{ gap: '14px' }}>
+                      <div>
+                        <label className="rename-input-label">Action Select Karo</label>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${singleMoveMode === 'move' ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => setSingleMoveMode('move')}
+                          >
+                            🚚 Move (स्थान परिवर्तन)
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${singleMoveMode === 'copy' ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => setSingleMoveMode('copy')}
+                          >
+                            📋 Copy (प्रतिलिपि)
+                          </button>
+                        </div>
+                      </div>
+
+                        <div>
+                          <label className="rename-input-label" style={{ marginBottom: '6px' }}>Target Folder Chuno *</label>
+                          <FolderPicker
+                            shopFolders={shopFolders}
+                            files={files}
+                            selectedFolderId={destFolderId}
+                            onSelectFolder={(id) => setDestFolderId(id)}
+                          />
+                        </div>
+
+
+                      {bulkError && (
+                        <p style={{ color: '#DC2626', fontSize: '0.78rem', margin: '4px 0 0', fontWeight: 600 }}>
+                          ❌ {bulkError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="rename-modal-actions" style={{ marginTop: '16px' }}>
+                      <button type="button" className="btn btn-ghost rename-btn" onClick={() => setSingleMoveTargetFile(null)}>
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn btn-primary rename-btn" disabled={isProcessingBulk}>
+                        {isProcessingBulk ? '⏳ Processing...' : singleMoveMode === 'move' ? '🚚 Move File' : '📋 Copy File'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </div>
+            )}
+
+
+            {/* ── Floating Sticky Bulk Action Bar for All Files ── */}
+            <AnimatePresence>
+              {activeNav === 'files' && selectedFileIds.size > 0 && (
+                <motion.div
+                  className="bulk-floating-bar"
+                  initial={{ y: 80, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 80, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="bulk-bar-content">
+                    <span className="bulk-badge">☑️ {selectedFileIds.size} Selected</span>
+                    <div className="bulk-bar-buttons">
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ background: '#4F46E5' }}
+                        onClick={() => { setBulkActionModal('move'); setDestFolderId(''); setBulkError(''); }}
+                      >
+                        🚚 Move
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => { setBulkActionModal('copy'); setDestFolderId(''); setBulkError(''); }}
+                      >
+                        📋 Copy
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => { setBulkActionModal('delete'); setBulkError(''); }}
+                      >
+                        🗑️ Delete
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: '#64748B' }}
+                        onClick={() => setSelectedFileIds(new Set())}
+                        title="Clear Selection"
+                      >
+                        ✕ Clear
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── Bulk Action Modal in LaptopView ── */}
+            {bulkActionModal && activeNav === 'files' && (
+              <div className="rename-modal-overlay" onClick={() => setBulkActionModal(null)}>
+                <motion.div
+                  className="rename-modal"
+                  style={{ maxWidth: '480px' }}
+                  onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <div className="rename-modal-header">
+                    <div className="rename-icon-badge" style={{
+                      background: bulkActionModal === 'delete' ? '#FEE2E2' : '#EEF2FF',
+                      borderColor: bulkActionModal === 'delete' ? '#FECACA' : '#C7D2FE'
+                    }}>
+                      {bulkActionModal === 'move' ? '🚚' : bulkActionModal === 'copy' ? '📋' : '🗑️'}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 className="rename-modal-title" style={{ color: bulkActionModal === 'delete' ? '#DC2626' : undefined }}>
+                        {bulkActionModal === 'move' ? 'Bulk Move Files' : bulkActionModal === 'copy' ? 'Bulk Copy Files' : 'Bulk Delete Files'}
+                      </h3>
+                      <p className="rename-modal-sub">{selectedFileIds.size} files selected</p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={(e) => { e.preventDefault(); handleExecuteBulkInLaptopView(); }}>
+                    <div className="rename-modal-body" style={{ gap: '14px' }}>
+                      {bulkActionModal === 'delete' ? (
+                        <p style={{ fontSize: '0.86rem', color: '#475569', lineHeight: 1.5 }}>
+                          ⚠️ Kya aap sach me select ki gayi <strong>{selectedFileIds.size} files</strong> ko delete karna chahte hain?
+                        </p>
+                      ) : (
+                        <div>
+                          <label className="rename-input-label" style={{ marginBottom: '6px' }}>Target Folder Chuno *</label>
+                          <FolderPicker
+                            shopFolders={shopFolders}
+                            files={files}
+                            selectedFolderId={destFolderId}
+                            onSelectFolder={(id) => setDestFolderId(id)}
+                          />
+                        </div>
+
+                      )}
+
+                      {bulkError && (
+                        <p style={{ color: '#DC2626', fontSize: '0.78rem', margin: '4px 0 0', fontWeight: 600 }}>
+                          ❌ {bulkError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="rename-modal-actions" style={{ marginTop: '16px' }}>
+                      <button type="button" className="btn btn-ghost rename-btn" onClick={() => setBulkActionModal(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className={`btn rename-btn ${bulkActionModal === 'delete' ? 'btn-danger' : 'btn-primary'}`}
+                        disabled={isProcessingBulk}
+                      >
+                        {isProcessingBulk ? '⏳ Processing...' : `${bulkActionModal === 'move' ? '🚚 Move' : bulkActionModal === 'copy' ? '📋 Copy' : '🗑️ Delete'} (${selectedFileIds.size})`}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </div>
+            )}
+
 
             {/* ── 3. TEXT NOTES ── */}
             {activeNav === 'texts' && (
