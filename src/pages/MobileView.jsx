@@ -51,11 +51,21 @@ function getSavedDeviceName() {
 function getShopAndSessionFromUrl() {
   const params = new URLSearchParams(window.location.search);
   let targetCustId = params.get('customerId') || null;
+  let folderId = params.get('folderId') || null;
+  let folderName = params.get('folderName') || null;
   
   if (targetCustId) {
     try { sessionStorage.setItem('wifidrop_target_customer_id', targetCustId); } catch {}
   } else {
     try { targetCustId = sessionStorage.getItem('wifidrop_target_customer_id') || null; } catch {}
+  }
+
+  if (folderId) {
+    try { sessionStorage.setItem('wifidrop_target_folder_id', folderId); } catch {}
+    try { sessionStorage.setItem('wifidrop_target_folder_name', folderName || ''); } catch {}
+  } else {
+    try { folderId = sessionStorage.getItem('wifidrop_target_folder_id') || null; } catch {}
+    try { folderName = sessionStorage.getItem('wifidrop_target_folder_name') || null; } catch {}
   }
 
   let rawSession = params.get('session') || null;
@@ -86,12 +96,14 @@ function getShopAndSessionFromUrl() {
     sessionId: effectiveSessionId,
     shopId: resolvedShopId,
     targetCustomerId: targetCustId,
+    folderId,
+    folderName,
   };
 }
 
 export function MobileView() {
   const deviceName = getSavedDeviceName();
-  const { sessionId, shopId, targetCustomerId } = useMemo(() => getShopAndSessionFromUrl(), []);
+  const { sessionId, shopId, targetCustomerId, folderId, folderName } = useMemo(() => getShopAndSessionFromUrl(), []);
   
   const customerFp = useMemo(() => getHardwareFingerprint(), []);
   const effectiveDeviceName = customerFp?.deviceName || deviceName;
@@ -388,7 +400,8 @@ export function MobileView() {
         effectiveCustomerId,
         customerName.trim() || null,
         customerFp?.customerId,
-        fileNotes
+        fileNotes,
+        folderId || null
       );
       if (uploadRes?.files && Array.isArray(uploadRes.files)) {
         setRecentUploads((prev) => [...uploadRes.files, ...prev]);
@@ -552,7 +565,30 @@ export function MobileView() {
 
       {/* Sub-header & Optional Name Input */}
       <div className="mobile-sub-header">
-        {targetCustomerId && (
+        {folderId && (
+          <div className="target-folder-banner" style={{ borderColor: '#4F46E5', background: 'linear-gradient(135deg, #EEF2FF, #E0E7FF)' }}>
+            <div className="target-folder-top flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="target-folder-icon">🗂️</span>
+                <div className="min-w-0">
+                  <div className="target-folder-title" style={{ color: '#312E81' }}>
+                    {folderName || 'Shop Folder Upload'}
+                  </div>
+                  <div className="target-folder-subtitle" style={{ color: '#4338CA' }}>
+                    Direct Folder Upload
+                  </div>
+                </div>
+              </div>
+              <span className="target-folder-badge" style={{ background: '#4F46E5' }}>Folder QR</span>
+            </div>
+            <div className="target-folder-id-tag" style={{ background: '#E0E7FF' }}>
+              <span className="id-label" style={{ color: '#3730A3' }}>Folder ID:</span>
+              <code className="id-code" style={{ color: '#312E81' }}>{folderId}</code>
+            </div>
+          </div>
+        )}
+
+        {!folderId && targetCustomerId && (
           <div className="target-folder-banner">
             <div className="target-folder-top flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">

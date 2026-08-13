@@ -21,6 +21,8 @@ export function QRModal({
   customerId,
   targetCustomerId,
   isViewOnly = false,
+  folderId = null,
+  folderName = null,
 }) {
   const [qrPurpose, setQrPurpose] = useState(() => (isViewOnly ? 'view' : 'upload')); // 'upload' | 'view'
   const [qrData, setQrData] = useState(null);
@@ -48,6 +50,8 @@ export function QRModal({
       if (sessionId) queryParts.push(`session=${encodeURIComponent(sessionId)}`);
       if (targetShop && targetShop !== 'default') queryParts.push(`shop=${encodeURIComponent(targetShop)}`);
       if (effectiveCustId) queryParts.push(`customerId=${encodeURIComponent(effectiveCustId)}`);
+      if (folderId) queryParts.push(`folderId=${encodeURIComponent(folderId)}`);
+      if (folderName) queryParts.push(`folderName=${encodeURIComponent(folderName)}`);
       if (qrPurpose === 'view') queryParts.push('view=only');
       const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
 
