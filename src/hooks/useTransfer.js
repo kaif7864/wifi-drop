@@ -10,6 +10,8 @@ import { shouldUseChunkedUpload, uploadSingleFileChunked } from '../utils/chunke
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 const getBaseUrl = () => config.serverUrl;
+const BASE_URL = config.serverUrl;
+
 
 function isRetryableUploadError(err) {
   if (!err) return false;
