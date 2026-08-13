@@ -108,12 +108,20 @@ export function useTransfer(shopId = null) {
   useEffect(() => {
     if (isShopOwner && cacheKey) {
       try {
-        const validFiles = files.filter((f) => f && (f.shopId === shopId || f.sessionId === shopId));
-        const validTexts = texts.filter((t) => t && (t.shopId === shopId || t.sessionId === shopId));
+        const sId = (shopId || '').toLowerCase().trim();
+        const matchesShop = (item) => {
+          if (!item) return false;
+          const iShop = (item.shopId || '').toLowerCase().trim();
+          const iSess = (item.sessionId || '').toLowerCase().trim();
+          return !sId || iShop === sId || iSess === sId || iShop === 'default';
+        };
+        const validFiles = files.filter(matchesShop);
+        const validTexts = texts.filter(matchesShop);
         localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), files: validFiles, texts: validTexts }));
       } catch {}
     }
   }, [files, texts, isShopOwner, cacheKey, shopId]);
+
 
   // ── Push a file received via socket ──────────────────────────────────────
   const addReceivedFile = useCallback((fileRecord) => {
