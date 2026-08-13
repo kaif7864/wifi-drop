@@ -637,7 +637,9 @@ export function LaptopView() {
                             files={files}
                             selectedFolderId={destFolderId}
                             onSelectFolder={(id) => setDestFolderId(id)}
+                            onCreateFolder={createShopFolder}
                           />
+
                         </div>
 
 
@@ -749,7 +751,9 @@ export function LaptopView() {
                             files={files}
                             selectedFolderId={destFolderId}
                             onSelectFolder={(id) => setDestFolderId(id)}
+                            onCreateFolder={createShopFolder}
                           />
+
                         </div>
 
                       )}

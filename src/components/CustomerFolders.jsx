@@ -513,6 +513,15 @@ export function CustomerFolders({
             </div>
 
             <div className="workspace-header-actions flex items-center gap-2">
+              {onCreateShopFolder && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowCreateFolderModal(true)}
+                  title="Create a new folder"
+                >
+                  ➕ New Folder
+                </button>
+              )}
               <button
                 className="btn btn-primary btn-sm btn-folder-qr"
                 onClick={() => setQrModalGroup(activeGroup)}
@@ -520,6 +529,7 @@ export function CustomerFolders({
               >
                 📱 Share Folder QR
               </button>
+
               {activeGroup.files.some((f) => !f.printedStatus) && onTogglePrint && (
                 <button
                   className="btn btn-secondary btn-sm"
@@ -861,16 +871,29 @@ export function CustomerFolders({
                     ✓ Printed ({customerGroups.length - unprintedFoldersCount})
                   </button>
                 </div>
-                <div style={{ maxWidth: '210px', width: '100%' }}>
+
+                <div className="flex items-center gap-2" style={{ maxWidth: '380px', width: '100%', justifyContent: 'flex-end' }}>
                   <input
                     type="text"
                     className="input input-sm"
                     placeholder="🔍 Search customer..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ fontSize: '0.82rem', flex: 1 }}
                   />
+                  {onCreateShopFolder && (
+                    <button
+                      className="btn btn-primary btn-sm new-folder-btn"
+                      onClick={() => setShowCreateFolderModal(true)}
+                      style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                    >
+                      ➕ New Folder
+                    </button>
+                  )}
                 </div>
               </div>
+
+
 
               <div className="folders-grid">
                 {filteredCustomerGroups.length === 0 ? (
@@ -1223,7 +1246,9 @@ export function CustomerFolders({
                     files={files}
                     selectedFolderId={destFolderId}
                     onSelectFolder={(id) => setDestFolderId(id)}
+                    onCreateFolder={onCreateShopFolder}
                   />
+
 
                 </div>
 
@@ -1306,7 +1331,9 @@ export function CustomerFolders({
                       files={files}
                       selectedFolderId={destFolderId}
                       onSelectFolder={(id) => setDestFolderId(id)}
+                      onCreateFolder={onCreateShopFolder}
                     />
+
 
                   </div>
 

@@ -1,7 +1,7 @@
 /**
  * client/src/components/FolderPicker.jsx
  * Searchable & Filterable Target Folder Selector for Move / Copy operations.
- * Supports both Shop Folders and Customer Folders with real-time Search.
+ * Supports both Shop Folders and Customer Folders with real-time Search & On-the-fly Folder Creation.
  */
 
 import { useState, useMemo } from 'react';
@@ -18,9 +18,15 @@ export function FolderPicker({
   files = [],
   selectedFolderId,
   onSelectFolder,
+  onCreateFolder,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all' | 'shop' | 'customer'
+  const [isCreatingInline, setIsCreatingInline] = useState(false);
+  const [inlineFolderName, setInlineFolderName] = useState('');
+  const [inlineFolderDesc, setInlineFolderDesc] = useState('');
+  const [isSavingInline, setIsSavingInline] = useState(false);
+  const [inlineError, setInlineError] = useState('');
 
   // Derive customer list if customerGroups is not passed directly
   const computedCustomerGroups = useMemo(() => {
@@ -76,7 +82,6 @@ export function FolderPicker({
     });
   }, [shopFolders, files]);
 
-
   // Combine all destinations
   const allDestinations = useMemo(() => {
     const list = [];
@@ -97,6 +102,34 @@ export function FolderPicker({
       (item.id && item.id.toLowerCase().includes(q))
     );
   }, [shopFoldersList, customerFoldersList, filterType, searchQuery]);
+
+  const handleInlineCreate = async (e) => {
+    if (e) e.preventDefault();
+    if (!inlineFolderName.trim()) {
+      setInlineError('Folder ka naam likhna zaroori hai.');
+      return;
+    }
+    setIsSavingInline(true);
+    setInlineError('');
+    try {
+      if (onCreateFolder) {
+        const created = await onCreateFolder({
+          folderName: inlineFolderName.trim(),
+          description: inlineFolderDesc.trim(),
+        });
+        if (created && created.folderId) {
+          onSelectFolder(created.folderId);
+        }
+      }
+      setIsCreatingInline(false);
+      setInlineFolderName('');
+      setInlineFolderDesc('');
+    } catch (err) {
+      setInlineError(err.response?.data?.error || err.message || 'Folder create nahi ho saka.');
+    } finally {
+      setIsSavingInline(false);
+    }
+  };
 
   return (
     <div className="folder-picker-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -131,34 +164,110 @@ export function FolderPicker({
         )}
       </div>
 
-      {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <button
-          type="button"
-          className={`btn btn-xs ${filterType === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={() => setFilterType('all')}
-          style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px' }}
-        >
-          All ({shopFoldersList.length + customerFoldersList.length})
-        </button>
+      {/* Inline Create Folder Form OR Filter Tabs */}
+      {isCreatingInline ? (
+        <div style={{
+          background: '#EEF2FF',
+          border: '1.5px solid #6366F1',
+          borderRadius: '12px',
+          padding: '10px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#3730A3' }}>
+              ✨ Move Ke Liye Naya Folder Banao
+            </span>
+            <button
+              type="button"
+              onClick={() => { setIsCreatingInline(false); setInlineError(''); }}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B', fontWeight: 'bold' }}
+            >
+              ✕
+            </button>
+          </div>
+          <input
+            type="text"
+            className="rename-text-input"
+            placeholder="Folder Name (e.g. Passport Photos, Documents)..."
+            value={inlineFolderName}
+            onChange={(e) => setInlineFolderName(e.target.value)}
+            style={{ fontSize: '0.82rem', height: '36px', background: '#FFFFFF' }}
+            autoFocus
+          />
+          <input
+            type="text"
+            className="rename-text-input"
+            placeholder="Description (optional)..."
+            value={inlineFolderDesc}
+            onChange={(e) => setInlineFolderDesc(e.target.value)}
+            style={{ fontSize: '0.80rem', height: '34px', background: '#FFFFFF' }}
+          />
+          {inlineError && (
+            <p style={{ color: '#DC2626', fontSize: '0.76rem', margin: 0, fontWeight: 600 }}>
+              ❌ {inlineError}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '2px' }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={() => { setIsCreatingInline(false); setInlineError(''); }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-xs"
+              disabled={isSavingInline || !inlineFolderName.trim()}
+              onClick={handleInlineCreate}
+            >
+              {isSavingInline ? '⏳ Creating...' : '➕ Create & Select'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterType === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setFilterType('all')}
+              style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px' }}
+            >
+              All ({shopFoldersList.length + customerFoldersList.length})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterType === 'shop' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setFilterType('shop')}
+              style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px' }}
+            >
+              🗂️ Shop ({shopFoldersList.length})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterType === 'customer' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setFilterType('customer')}
+              style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px' }}
+            >
+              👤 Customer ({customerFoldersList.length})
+            </button>
+          </div>
 
-        <button
-          type="button"
-          className={`btn btn-xs ${filterType === 'shop' ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={() => setFilterType('shop')}
-          style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px' }}
-        >
-          🗂️ Shop ({shopFoldersList.length})
-        </button>
-        <button
-          type="button"
-          className={`btn btn-xs ${filterType === 'customer' ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={() => setFilterType('customer')}
-          style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px' }}
-        >
-          👤 Customer ({customerFoldersList.length})
-        </button>
-      </div>
+          {onCreateFolder && (
+            <button
+              type="button"
+              className="btn btn-xs btn-secondary"
+              onClick={() => { setIsCreatingInline(true); setInlineError(''); }}
+              style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px', color: '#4F46E5', fontWeight: 700, whiteSpace: 'nowrap' }}
+            >
+              ➕ New Folder
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Scrollable Destinations List */}
       <div
