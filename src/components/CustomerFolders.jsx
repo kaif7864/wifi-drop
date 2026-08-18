@@ -42,6 +42,17 @@ function normalizeCustomerId(item) {
   return item.customerId || 'cust_anonymous';
 }
 
+function getFolderFiles(folder, allFiles = []) {
+  if (!folder) return [];
+  return (allFiles || []).filter((f) => {
+    if (f.isDeleted) return false;
+    if (f.folderId === folder.folderId) return true;
+    if (folder.customerId && f.customerId === folder.customerId) return true;
+    if (folder.folderName && f.customerName && f.customerName.toLowerCase().trim() === folder.folderName.toLowerCase().trim()) return true;
+    return false;
+  });
+}
+
 
 function getNicknames() {
   try {
@@ -646,7 +657,7 @@ export function CustomerFolders({
                   <p className="workspace-sub">{selectedShopFolder.description}</p>
                 )}
                 <div className="workspace-meta-row flex items-center gap-2 mt-1">
-                  <span className="workspace-meta-badge">📄 {files.filter(f => f.folderId === selectedShopFolder.folderId).length} Files</span>
+                  <span className="workspace-meta-badge">📄 {getFolderFiles(selectedShopFolder, files).length} Files</span>
                   <span className="meta-dot">·</span>
                   <span className="workspace-id-chip">ID: {selectedShopFolder.folderId}</span>
                 </div>
@@ -708,7 +719,7 @@ export function CustomerFolders({
 
           {/* Files that belong to this folder */}
           {(() => {
-            const folderFiles = files.filter(f => f.folderId === selectedShopFolder.folderId);
+            const folderFiles = getFolderFiles(selectedShopFolder, files);
             return (
               <div className="workspace-section">
                 <h4 className="section-heading">Files in this Folder ({folderFiles.length})</h4>
@@ -785,19 +796,27 @@ export function CustomerFolders({
               ) : (
                 <div className="folders-grid">
                   {myShopFolders.map((folder) => {
-
-                    const folderFiles = files.filter(f => f.folderId === folder.folderId);
+                    const folderFiles = getFolderFiles(folder, files);
                     return (
                       <motion.div
                         key={folder.folderId}
-                        className="folder-card shop-folder-card glass-card"
+                        className="folder-card glass-card"
                         onClick={() => setSelectedShopFolder(folder)}
                         whileHover={{ y: -3, transition: { duration: 0.15 } }}
                       >
                         <div className="folder-icon-wrapper">
-                          <span className="folder-icon">🗂️</span>
+                          <span className="folder-icon">📁</span>
                           <div className="flex items-center gap-2">
-                            <span className="shop-folder-badge-tag">My Folder</span>
+                            <button
+                              className="btn-icon"
+                              title="Share QR for this folder"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setQrModalShopFolder(folder);
+                              }}
+                            >
+                              📱
+                            </button>
                             <button
                               className="btn-icon btn-secondary-icon"
                               title="Rename this folder"
@@ -811,56 +830,41 @@ export function CustomerFolders({
                             >
                               ✏️
                             </button>
-                            <button
-                              className="btn-icon"
-                              title="Share QR — customer scans to upload"
-                              onClick={(e) => { e.stopPropagation(); setQrModalShopFolder(folder); }}
-                            >
-                              📱
-                            </button>
-                            <button
-                              className="btn-icon btn-danger-icon"
-                              title="Delete this folder"
-                              onClick={(e) => { e.stopPropagation(); setShopFolderDeleteConfirm(folder); }}
-                            >
-                              🗑️
-                            </button>
+                            {onDeleteShopFolder && (
+                              <button
+                                className="btn-icon btn-danger-icon"
+                                title="Delete folder"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShopFolderDeleteConfirm(folder);
+                                }}
+                              >
+                                🗑️
+                              </button>
+                            )}
                           </div>
-
                         </div>
+
                         <div className="folder-info">
                           <h3 className="folder-name">{folder.folderName}</h3>
                           {folder.description && (
-                            <p className="folder-meta" style={{ fontStyle: 'italic', color: '#64748B' }}>{folder.description}</p>
+                            <p className="folder-desc" style={{ fontSize: '0.78rem', color: '#64748B', margin: '1px 0 3px', fontWeight: 500 }}>
+                              {folder.description}
+                            </p>
                           )}
-                          <p className="folder-meta" style={{ marginTop: '2px' }}>
-                            <span style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>ID: </span>
-                            <code style={{ background: '#EEF2FF', padding: '1px 5px', borderRadius: '4px', color: '#4F46E5', fontSize: '0.72rem', fontWeight: 700 }}>{folder.folderId}</code>
-                          </p>
                           <p className="folder-meta">
-                            {folderFiles.length} Files
-                            {folderFiles.length > 0 ? ` · ${formatBytes(folderFiles.reduce((a, f) => a + (f.size || 0), 0))}` : ''}
+                            {folderFiles.length} Files{folderFiles.length > 0 ? ` (${formatBytes(folderFiles.reduce((a, f) => a + (f.size || 0), 0))})` : ''}
                           </p>
-                          <span className="folder-time">
-                            Created {new Date(folder.createdAt).toLocaleDateString()}
-                          </span>
                         </div>
-
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                          <button
-                            className="btn btn-secondary btn-xs"
-                            style={{ flex: 1 }}
-                            onClick={(e) => { e.stopPropagation(); setQrModalShopFolder(folder); }}
-                          >
-                            📱 Share QR
-                          </button>
-                          <button className="btn btn-ghost btn-xs folder-open-btn" style={{ flex: 1 }}>
-                            Open ↗
-                          </button>
-                        </div>
+                        <button className="btn btn-ghost btn-xs folder-open-btn">
+                          Open Folder ↗
+                        </button>
                       </motion.div>
+
+
                     );
                   })}
+
                 </div>
               )}
             </>
@@ -928,20 +932,30 @@ export function CustomerFolders({
                 ) : (
                   <>
                     {customCustomerFolders.map((folder) => {
-                      const folderFiles = files.filter((f) => f.folderId === folder.folderId);
+                      const folderFiles = getFolderFiles(folder, files);
                       return (
                         <motion.div
                           key={folder.folderId}
-                          className="folder-card shop-folder-card glass-card"
+                          className="folder-card glass-card"
                           onClick={() => setSelectedShopFolder(folder)}
                           whileHover={{ y: -3, transition: { duration: 0.15 } }}
                         >
                           <div className="folder-icon-wrapper">
                             <span className="folder-icon">📁</span>
                             <div className="flex items-center gap-2">
-                              <span className="shop-folder-badge-tag" style={{ background: '#EEF2FF', color: '#4F46E5', borderColor: '#C7D2FE' }}>
-                                Custom Folder
+                              <span className="shop-folder-badge-tag" style={{ background: '#EEF2FF', color: '#4F46E5', borderColor: '#C7D2FE', fontSize: '0.66rem', fontWeight: 800 }}>
+                                CUSTOM FOLDER
                               </span>
+                              <button
+                                className="btn-icon"
+                                title="Share QR for this folder"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setQrModalShopFolder(folder);
+                                }}
+                              >
+                                📱
+                              </button>
                               <button
                                 className="btn-icon btn-secondary-icon"
                                 title="Rename this folder"
@@ -955,17 +969,30 @@ export function CustomerFolders({
                               >
                                 ✏️
                               </button>
+                              {onDeleteShopFolder && (
+                                <button
+                                  className="btn-icon btn-danger-icon"
+                                  title="Delete folder"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShopFolderDeleteConfirm(folder);
+                                  }}
+                                >
+                                  🗑️
+                                </button>
+                              )}
                             </div>
                           </div>
 
                           <div className="folder-info">
                             <h3 className="folder-name">{folder.folderName}</h3>
                             {folder.description && (
-                              <p className="folder-desc">{folder.description}</p>
+                              <p className="folder-desc" style={{ fontSize: '0.78rem', color: '#64748B', margin: '1px 0 3px', fontWeight: 500 }}>
+                                {folder.description}
+                              </p>
                             )}
                             <p className="folder-meta">
-                              {folderFiles.length} Files
-                              {folderFiles.length > 0 ? ` · ${formatBytes(folderFiles.reduce((a, f) => a + (f.size || 0), 0))}` : ''}
+                              {folderFiles.length} Files{folderFiles.length > 0 ? ` (${formatBytes(folderFiles.reduce((a, f) => a + (f.size || 0), 0))})` : ''}
                             </p>
                           </div>
 
@@ -973,6 +1000,7 @@ export function CustomerFolders({
                             Open Folder ↗
                           </button>
                         </motion.div>
+
                       );
                     })}
 
@@ -1660,20 +1688,24 @@ export function CustomerFolders({
         }
 
         .folder-card {
-          padding: var(--space-5);
+          padding: 20px;
           display: flex;
           flex-direction: column;
-          gap: var(--space-4);
+          gap: 16px;
           cursor: pointer;
-          border: 1px solid var(--border);
-          background: #ffffff;
-          border-radius: var(--radius-xl);
-          transition: all 0.2s ease;
+          border: 1.5px solid #C7D2FE;
+          background: linear-gradient(145deg, #FFFFFF 0%, #F5F3FF 100%);
+          border-radius: 22px;
+          box-shadow: 0 4px 18px rgba(79, 70, 229, 0.07);
+          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          position: relative;
         }
 
         .folder-card:hover {
-          border-color: var(--accent-primary);
-          box-shadow: 0 10px 25px rgba(79, 70, 229, 0.12);
+          border-color: #6366F1;
+          background: linear-gradient(145deg, #FFFFFF 0%, #EEF2FF 100%);
+          box-shadow: 0 14px 32px rgba(79, 70, 229, 0.22);
+          transform: translateY(-4px);
         }
 
         .folder-icon-wrapper {
@@ -1682,34 +1714,91 @@ export function CustomerFolders({
           justify-content: space-between;
         }
 
-        .folder-icon { font-size: 2.2rem; }
+        .folder-icon { font-size: 2.2rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08)); }
 
         .folder-badge {
-          background: var(--danger);
+          background: linear-gradient(135deg, #EF4444, #DC2626);
           color: #ffffff;
           font-size: 10px;
           font-weight: 800;
-          padding: 2px 8px;
-          border-radius: var(--radius-full);
+          padding: 3px 10px;
+          border-radius: 9999px;
+          box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+          letter-spacing: 0.02em;
+        }
+
+        .shop-folder-badge-tag {
+          background: linear-gradient(135deg, #EEF2FF, #E0E7FF);
+          color: #4F46E5;
+          border: 1px solid #C7D2FE;
+          font-size: 9px;
+          font-weight: 800;
+          padding: 3px 10px;
+          border-radius: 9999px;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .btn-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+          border: 1px solid #E2E8F0;
+          background: #FFFFFF;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          font-size: 0.88rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .btn-icon:hover {
+          transform: scale(1.08);
+          border-color: #C7D2FE;
+          box-shadow: 0 3px 8px rgba(0,0,0,0.08);
         }
 
         .folder-name {
-          font-size: var(--font-size-md);
+          font-size: 1.05rem;
           font-weight: 800;
-          color: var(--text-primary);
+          color: #1E293B;
         }
 
         .folder-meta {
-          font-size: var(--font-size-xs);
-          color: var(--text-secondary);
+          font-size: 0.82rem;
+          color: #64748B;
+          font-weight: 500;
         }
 
         .folder-time {
           font-size: 11px;
-          color: var(--text-muted);
+          color: #94A3B8;
           margin-top: 2px;
           display: block;
         }
+
+        .folder-open-btn {
+          width: 100%;
+          border-radius: 9999px !important;
+          border: 1.5px solid #CBD5E1 !important;
+          background: #FFFFFF !important;
+          color: #334155 !important;
+          font-weight: 700 !important;
+          font-size: 0.80rem !important;
+          padding: 7px 16px !important;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+
+        .folder-card:hover .folder-open-btn {
+          background: linear-gradient(135deg, #4F46E5, #6366F1) !important;
+          color: #FFFFFF !important;
+          border-color: #4F46E5 !important;
+          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
+        }
+
 
         .workspace-header {
           margin-bottom: var(--space-5);
