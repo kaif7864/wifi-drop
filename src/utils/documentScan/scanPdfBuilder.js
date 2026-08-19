@@ -18,9 +18,10 @@ function limitEdge(width, height, maxEdge) {
 
 /**
  * @param {{ dataUrl: string, width: number, height: number }[]} pages
+ * @param {string} [customName]
  * @returns {Promise<File>}
  */
-export async function buildScanPdfFile(pages) {
+export async function buildScanPdfFile(pages, customName) {
   if (!pages?.length) {
     throw new Error('No pages to export');
   }
@@ -52,15 +53,35 @@ export async function buildScanPdfFile(pages) {
   }
 
   const blob = pdf.output('blob');
-  const fileName = generateScanFileName();
+  const fileName = customName ? `${customName.replace(/\.pdf$/i, '')}.pdf` : generateScanFileName('pdf');
 
   return new File([blob], fileName, { type: 'application/pdf' });
 }
 
-export function generateScanFileName() {
+/**
+ * Convert pages to a JPEG File
+ * @param {{ dataUrl: string, width: number, height: number }[]} pages
+ * @param {string} [customName]
+ * @returns {Promise<File>}
+ */
+export async function buildScanJpgFile(pages, customName) {
+  if (!pages?.length) {
+    throw new Error('No pages to export');
+  }
+  
+  // Use first page or canvas merge
+  const firstPage = pages[0];
+  const response = await fetch(firstPage.dataUrl);
+  const blob = await response.blob();
+  const fileName = customName ? `${customName.replace(/\.jpg$/i, '')}.jpg` : generateScanFileName('jpg');
+
+  return new File([blob], fileName, { type: 'image/jpeg' });
+}
+
+export function generateScanFileName(ext = 'pdf') {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  return `scan_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.pdf`;
+  return `scan_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.${ext}`;
 }
 
 export function formatFileSize(bytes) {

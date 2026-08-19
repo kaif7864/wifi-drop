@@ -16,14 +16,27 @@ const ICE_SERVERS = {
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for optimal RTCDataChannel performance
 
-export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
+export function useWebRTC({ socket, sessionId, role, shopId = null, onFileReceived }) {
   const [peerState, setPeerState] = useState('disconnected'); // 'disconnected' | 'connecting' | 'connected' | 'failed'
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
   const incomingFileRef = useRef({ buffer: [], meta: null, receivedSize: 0 });
+  const pendingIceRef = useRef([]);
+
+  const flushPendingIce = useCallback(async (pc) => {
+    const pending = pendingIceRef.current.splice(0);
+    for (const candidate of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn('[WebRTC] Deferred ICE candidate failed:', err.message);
+      }
+    }
+  }, []);
 
   // Cleanup current peer connection
   const cleanup = useCallback(() => {
+    pendingIceRef.current = [];
     if (dataChannelRef.current) {
       dataChannelRef.current.close();
       dataChannelRef.current = null;
@@ -112,6 +125,8 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
             try {
               const formData = new FormData();
               formData.append('files', new File([blob], fileMeta.name, { type: fileMeta.mimeType }));
+              formData.append('shopId', shopId || sessionId || 'default');
+              if (sessionId) formData.append('sessionId', sessionId);
               formData.append('deviceName', fileMeta.deviceName || 'WebRTC Mobile');
               if (fileMeta.customerId) formData.append('customerId', fileMeta.customerId);
               if (fileMeta.customerName) formData.append('customerName', fileMeta.customerName);
@@ -128,7 +143,7 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
         incomingFileRef.current.receivedSize += event.data.byteLength;
       }
     };
-  }, [onFileReceived]);
+  }, [onFileReceived, sessionId, shopId]);
 
   // Initialize peer connection
   const createPeerConnection = useCallback(() => {
@@ -163,7 +178,9 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
 
   // Initiate P2P Connection (Mobile calls this)
   const initiateConnect = useCallback(async () => {
-    if (!socket || !sessionId) return;
+    if (!socket || !sessionId || role !== 'mobile') return;
+    if (peerState === 'connected' || peerState === 'connecting') return;
+    cleanup();
     const pc = createPeerConnection();
 
     // Create DataChannel on initiator side
@@ -179,7 +196,7 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
       console.error('[WebRTC] Failed to create offer:', err);
       setPeerState('failed');
     }
-  }, [socket, sessionId, createPeerConnection, setupDataChannelEvents]);
+  }, [socket, sessionId, role, peerState, cleanup, createPeerConnection, setupDataChannelEvents]);
 
   // Send file via WebRTC DataChannel
   const sendFileP2P = useCallback((file, deviceName, customerId = null, customerName = null, onProgress = null) => {
@@ -243,36 +260,46 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
     if (!socket) return;
 
     const onOffer = async ({ from, offer }) => {
+      if (role !== 'laptop') return;
       console.log('[WebRTC] Received offer from:', from);
+      cleanup();
       const pc = createPeerConnection();
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        await flushPendingIce(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('signal_answer', { sessionId, answer, targetId: from });
       } catch (err) {
         console.error('[WebRTC] Offer handling error:', err);
+        setPeerState('failed');
       }
     };
 
     const onAnswer = async ({ answer }) => {
+      if (role !== 'mobile') return;
       console.log('[WebRTC] Received answer');
       if (pcRef.current) {
         try {
           await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+          await flushPendingIce(pcRef.current);
         } catch (err) {
           console.error('[WebRTC] Answer handling error:', err);
+          setPeerState('failed');
         }
       }
     };
 
     const onIceCandidate = async ({ candidate }) => {
-      if (pcRef.current) {
-        try {
-          await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error('[WebRTC] ICE candidate error:', err);
-        }
+      if (!candidate || !pcRef.current) return;
+      if (!pcRef.current.remoteDescription) {
+        pendingIceRef.current.push(candidate);
+        return;
+      }
+      try {
+        await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error('[WebRTC] ICE candidate error:', err);
       }
     };
 
@@ -285,7 +312,7 @@ export function useWebRTC({ socket, sessionId, role, onFileReceived }) {
       socket.off('signal_answer', onAnswer);
       socket.off('ice_candidate', onIceCandidate);
     };
-  }, [socket, sessionId, createPeerConnection]);
+  }, [socket, sessionId, role, cleanup, createPeerConnection, flushPendingIce]);
 
   return {
     peerState,

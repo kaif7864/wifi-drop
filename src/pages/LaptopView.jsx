@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 import { useTransfer } from '../hooks/useTransfer';
+import { useWebRTC } from '../hooks/useWebRTC';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../App';
 import { FileCard } from '../components/FileCard';
@@ -84,8 +85,7 @@ export function LaptopView() {
 
 
   const [toasts, setToasts] = useState([]);
-  const [peerState] = useState('disconnected');
-  const [connectedDevice] = useState(null);
+  const [connectedDevice, setConnectedDevice] = useState(null);
 
   // Multi-Selection State for All Files tab
   const [selectedFileIds, setSelectedFileIds] = useState(new Set());
@@ -187,6 +187,44 @@ export function LaptopView() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const processIncomingFile = useCallback((fileData) => {
+    const fileId = fileData.uuid || fileData.id || fileData._id || `${fileData.originalName}_${fileData.size}`;
+    const lastProcessed = recentEventsRef.current.get(`file_${fileId}`);
+    if (lastProcessed && Date.now() - lastProcessed < 10000) {
+      return;
+    }
+    recentEventsRef.current.set(`file_${fileId}`, Date.now());
+
+    addReceivedFile(fileData);
+
+    const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
+    if (soundEnabled) {
+      playNotificationSound();
+    }
+
+    sendSystemNotification(`📥 New File: ${fileData.originalName || 'Received File'}`, {
+      body: `From: ${fileData.customerName || fileData.deviceName || 'Customer'}`,
+      tag: `file_${fileId}`,
+    });
+
+    addToast({
+      dedupeKey: `file_${fileId || fileData.originalName}`,
+      type: 'file',
+      title: `📥 ${fileData.originalName}`,
+      message: `${fileData.customerName || fileData.deviceName || 'Mobile'} transferred a file`,
+      file: fileData,
+    });
+    setTimeout(() => fetchHistory(activeShopId, targetSessionId, token), 1000);
+  }, [addReceivedFile, addToast, fetchHistory, activeShopId, targetSessionId, token]);
+
+  const { peerState } = useWebRTC({
+    socket,
+    sessionId,
+    role: 'laptop',
+    shopId: activeShopId || sessionId,
+    onFileReceived: processIncomingFile,
+  });
+
   const handleLogout = useCallback(() => {
     setToasts([]);
     recentToastIdsRef.current.clear();
@@ -203,36 +241,7 @@ export function LaptopView() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleFileReceived = (fileData) => {
-      const fileId = fileData.uuid || fileData.id || fileData._id || `${fileData.originalName}_${fileData.size}`;
-      const lastProcessed = recentEventsRef.current.get(`file_${fileId}`);
-      if (lastProcessed && Date.now() - lastProcessed < 10000) {
-        return; // Prevent duplicate notifications within 10 seconds
-      }
-      recentEventsRef.current.set(`file_${fileId}`, Date.now());
-
-      addReceivedFile(fileData);
-
-      const soundEnabled = localStorage.getItem('wifidrop_sound_enabled') !== 'false';
-      if (soundEnabled) {
-        playNotificationSound();
-      }
-
-      sendSystemNotification(`📥 New File: ${fileData.originalName || 'Received File'}`, {
-        body: `From: ${fileData.customerName || fileData.deviceName || 'Customer'}`,
-        tag: `file_${fileId}`,
-      });
-
-      addToast({
-        dedupeKey: `file_${fileId || fileData.originalName}`,
-        type: 'file',
-        title: `📥 ${fileData.originalName}`,
-        message: `${fileData.customerName || fileData.deviceName || 'Mobile'} transferred a file`,
-        file: fileData,
-      });
-      // Backup: also re-fetch from server to catch any missed/mismatched socket events
-      setTimeout(() => fetchHistory(activeShopId, targetSessionId, token), 1000);
-    };
+    const handleFileReceived = (fileData) => processIncomingFile(fileData);
 
     const handleTextReceived = (textData) => {
       const textId = textData.uuid || textData.id || textData._id || `${textData.text?.slice(0, 15)}`;
@@ -266,12 +275,16 @@ export function LaptopView() {
 
     socket.on('file_received', handleFileReceived);
     socket.on('text_received', handleTextReceived);
+    socket.on('device_connected', (device) => setConnectedDevice(device));
+    socket.on('device_disconnected', () => setConnectedDevice(null));
 
     return () => {
       socket.off('file_received', handleFileReceived);
       socket.off('text_received', handleTextReceived);
+      socket.off('device_connected');
+      socket.off('device_disconnected');
     };
-  }, [socket, addReceivedFile, addReceivedText, addToast, fetchHistory, activeShopId, targetSessionId, token]);
+  }, [socket, processIncomingFile, addReceivedText, addToast, fetchHistory, activeShopId, targetSessionId, token]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('all');

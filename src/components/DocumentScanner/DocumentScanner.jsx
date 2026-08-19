@@ -330,64 +330,50 @@ export function DocumentScanner({ isOpen, onClose, onScanComplete }) {
 
 
 
-  const handleCreatePdf = async () => {
+  const [exportFormat, setExportFormat] = useState('pdf');
 
+  const handleCreatePdf = async (formatOverride) => {
     if (pages.length === 0) return;
-
-
+    const targetFormat = formatOverride || exportFormat;
 
     setStep('exporting');
-
     setExportProgress(10);
 
-
-
     try {
-
       setExportProgress(40);
+      const pageItems = pages.map((p) => ({
+        dataUrl: p.dataUrl,
+        width: p.width,
+        height: p.height,
+      }));
 
-      const file = await buildScanPdfFile(
-
-        pages.map((p) => ({
-
-          dataUrl: p.dataUrl,
-
-          width: p.width,
-
-          height: p.height,
-
-        }))
-
-      );
+      let file;
+      if (targetFormat === 'jpg') {
+        file = await buildScanJpgFile(pageItems);
+      } else {
+        file = await buildScanPdfFile(pageItems);
+      }
 
       setExportProgress(100);
-
       setResultFile(file);
-
+      setExportFormat(targetFormat);
       setStep('success');
-
     } catch (err) {
-
-      console.error('[DocumentScanner] PDF export failed:', err);
-
+      console.error('[DocumentScanner] PDF/JPG export failed:', err);
       setStep('review');
-
     }
-
   };
 
-
+  const handleChangeFormat = async (newFormat) => {
+    if (newFormat === exportFormat) return;
+    await handleCreatePdf(newFormat);
+  };
 
   const handleAddToTray = () => {
-
     if (resultFile) {
-
       onScanComplete?.(resultFile);
-
     }
-
     handleClose();
-
   };
 
 
@@ -651,17 +637,13 @@ export function DocumentScanner({ isOpen, onClose, onScanComplete }) {
               <motion.div key="success" style={{ display: 'contents' }} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
 
                 <ScannerSuccess
-
                   pageCount={pages.length}
-
                   fileName={resultFile.name}
-
                   fileSize={formatFileSize(resultFile.size)}
-
+                  exportFormat={exportFormat}
+                  onChangeFormat={handleChangeFormat}
                   onAddToTray={handleAddToTray}
-
                   onScanMore={resetScanner}
-
                 />
 
               </motion.div>

@@ -356,14 +356,16 @@ export function ScannerCropEditor({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="doc-scanner-autodetect-btn"
-            onClick={handleAutoDetect}
-            disabled={detectingEdges || isProcessing}
-          >
-            {detectingEdges ? 'Detecting…' : '✨ Auto-detect edges'}
-          </button>
+          <div className="doc-scanner-tools-row">
+            <button
+              type="button"
+              className="doc-scanner-autodetect-btn"
+              onClick={handleAutoDetect}
+              disabled={detectingEdges || isProcessing}
+            >
+              {detectingEdges ? 'Detecting…' : '✨ Auto-detect'}
+            </button>
+          </div>
           {detectMessage && (
             <p className="doc-scanner-detect-msg">{detectMessage}</p>
           )}
@@ -374,7 +376,7 @@ export function ScannerCropEditor({
             Retake
           </button>
           <button type="button" className="btn btn-ghost" onClick={onAddPage} disabled={isProcessing || isEditing}>
-            + Page
+            + Add Page
           </button>
           <button type="button" className="btn btn-primary" onClick={onDone} disabled={isProcessing}>
             {isProcessing ? 'Processing...' : isEditing ? 'Save ✓' : 'Done ✓'}

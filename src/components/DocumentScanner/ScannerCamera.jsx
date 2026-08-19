@@ -25,7 +25,12 @@ export function ScannerCamera({
   const galleryRef = useRef(null);
   const viewfinderRef = useRef(null);
   const capturingRef = useRef(false);
+  const autoTimerRef = useRef(null);
+
   const [autoFlash, setAutoFlash] = useState(false);
+  const [scanMode, setScanMode] = useState('manual'); // 'manual' | 'auto'
+  const [docDetected, setDocDetected] = useState(true);
+  const [autoCountdown, setAutoCountdown] = useState(null);
 
   const cameraAllowed = useMemo(() => canUseCameraApi(), []);
 
@@ -50,15 +55,13 @@ export function ScannerCamera({
 
   const updateOverlayLayout = useCallback(() => {
     const container = viewfinderRef.current;
-    const video = typeof videoRef === 'function' ? null : videoRef?.current;
-    // videoRef is callback ref — read from DOM in viewfinder
     const videoEl = viewfinderRef.current?.querySelector('video');
     if (!container || !videoEl?.videoWidth) return;
     const rect = container.getBoundingClientRect();
     setOverlayLayout(
       getVideoCoverLayout(rect.width, rect.height, videoEl.videoWidth, videoEl.videoHeight)
     );
-  }, [videoRef]);
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -71,6 +74,7 @@ export function ScannerCamera({
     const videoEl = viewfinderRef.current?.querySelector('video');
     if (!videoEl || !ready || capturingRef.current) return;
     capturingRef.current = true;
+    setAutoCountdown(null);
 
     try {
       const frame = captureVideoFrame(videoEl);
@@ -91,6 +95,29 @@ export function ScannerCamera({
       }, 600);
     }
   }, [ready, onCapture]);
+
+  // Auto-capture timer when in 'auto' mode and document is ready
+  useEffect(() => {
+    if (scanMode !== 'auto' || !ready || displayError || capturingRef.current) {
+      setAutoCountdown(null);
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+      return;
+    }
+
+    setAutoCountdown(2);
+    const intervalId = setInterval(() => {
+      setAutoCountdown((prev) => {
+        if (prev === 1) {
+          clearInterval(intervalId);
+          performCapture();
+          return null;
+        }
+        return prev ? prev - 1 : null;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [scanMode, ready, displayError, performCapture]);
 
   const handleGalleryChange = (e) => {
     const file = e.target.files?.[0];
@@ -113,6 +140,20 @@ export function ScannerCamera({
 
       <div className="doc-scanner-camera-wrap">
         <div className={`doc-scanner-viewfinder ${autoFlash ? 'doc-scanner-flash' : ''}`} ref={viewfinderRef}>
+          {ready && !displayError && (
+            <div className={`doc-scanner-status-badge ${docDetected ? 'detected' : 'searching'}`}>
+              <span className="badge-dot" />
+              {docDetected ? 'DOCUMENT DETECTED' : 'SEARCHING DOCUMENT...'}
+            </div>
+          )}
+
+          {autoCountdown && (
+            <div className="doc-scanner-auto-countdown">
+              <span>Hold Steady</span>
+              <div className="countdown-number">{autoCountdown}</div>
+            </div>
+          )}
+
           {displayError ? (
             <div className="doc-scanner-camera-error">
               <span className="doc-scanner-camera-error-icon">📷</span>
@@ -150,13 +191,17 @@ export function ScannerCamera({
               {ready && overlayLayout && (
                 <svg className="doc-scanner-camera-overlay" aria-hidden="true">
                   <rect
-                    x={overlayLayout.offsetX + overlayLayout.drawW * 0.1}
-                    y={overlayLayout.offsetY + overlayLayout.drawH * 0.12}
-                    width={overlayLayout.drawW * 0.8}
-                    height={overlayLayout.drawH * 0.76}
+                    x={overlayLayout.offsetX + overlayLayout.drawW * 0.08}
+                    y={overlayLayout.offsetY + overlayLayout.drawH * 0.1}
+                    width={overlayLayout.drawW * 0.84}
+                    height={overlayLayout.drawH * 0.8}
                     className="doc-scanner-camera-polygon doc-scanner-camera-polygon-guide"
-                    rx={4}
+                    rx={6}
                   />
+                  <circle cx={overlayLayout.offsetX + overlayLayout.drawW * 0.08} cy={overlayLayout.offsetY + overlayLayout.drawH * 0.1} r="6" className="camera-corner-dot" />
+                  <circle cx={overlayLayout.offsetX + overlayLayout.drawW * 0.92} cy={overlayLayout.offsetY + overlayLayout.drawH * 0.1} r="6" className="camera-corner-dot" />
+                  <circle cx={overlayLayout.offsetX + overlayLayout.drawW * 0.92} cy={overlayLayout.offsetY + overlayLayout.drawH * 0.9} r="6" className="camera-corner-dot" />
+                  <circle cx={overlayLayout.offsetX + overlayLayout.drawW * 0.08} cy={overlayLayout.offsetY + overlayLayout.drawH * 0.9} r="6" className="camera-corner-dot" />
                 </svg>
               )}
             </>
@@ -176,7 +221,9 @@ export function ScannerCamera({
             : showLoading
             ? 'Starting camera (max 12s)...'
             : ready
-            ? 'Tap capture — adjust crop on next screen'
+            ? scanMode === 'auto'
+              ? 'Hold steady for auto-capture...'
+              : 'Tap capture — adjust crop on next screen'
             : 'Point camera at document'}
         </p>
       </div>
@@ -190,12 +237,30 @@ export function ScannerCamera({
       />
 
       <footer className="doc-scanner-camera-footer">
+        <div className="doc-scanner-mode-switch">
+          <button
+            type="button"
+            className={`doc-scanner-mode-tab ${scanMode === 'manual' ? 'active' : ''}`}
+            onClick={() => setScanMode('manual')}
+          >
+            📸 Manual
+          </button>
+          <button
+            type="button"
+            className={`doc-scanner-mode-tab ${scanMode === 'auto' ? 'active' : ''}`}
+            onClick={() => setScanMode('auto')}
+          >
+            ⚡ Auto
+          </button>
+        </div>
+
         <div className="doc-scanner-camera-controls">
           <button
             type="button"
             className="doc-scanner-side-btn"
             aria-label="Import from gallery"
             onClick={() => galleryRef.current?.click()}
+            title="Import from gallery"
           >
             🖼️
           </button>
@@ -214,6 +279,7 @@ export function ScannerCamera({
               className={`doc-scanner-side-btn ${torchOn ? 'doc-scanner-torch-on' : ''}`}
               onClick={toggleTorch}
               aria-label="Toggle flash"
+              title="Toggle flash"
             >
               ⚡
             </button>
@@ -234,6 +300,7 @@ export function ScannerCamera({
               onClick={flipCamera}
               disabled={!!displayError || !cameraAllowed}
               aria-label="Switch camera"
+              title="Switch camera"
             >
               🔄
             </button>
